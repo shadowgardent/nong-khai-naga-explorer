@@ -1,8 +1,8 @@
 # 🌊 Nong Khai Naga Explorer (แอปรวมพิกัดท่องเที่ยวหนองคาย)
 
-[![Expo](https://img.shields.io/badge/Expo-SDK%2054-000020?style=for-the-badge&logo=expo&logoColor=white)](https://expo.dev/)
-[![React Native](https://img.shields.io/badge/React_Native-0.81.5-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://reactnative.dev/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Expo](https://img.shields.io/badge/Expo-SDK%2057-000020?style=for-the-badge&logo=expo&logoColor=white)](https://expo.dev/)
+[![React Native](https://img.shields.io/badge/React_Native-0.86.3-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://reactnative.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6.0-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Platform](https://img.shields.io/badge/Platform-iOS%20%7C%20Android-green?style=for-the-badge)](https://expo.dev/)
 
 แอปพลิเคชันแนะนำสถานที่ท่องเที่ยวและแลนด์มาร์กสำคัญใน **จังหวัดหนองคาย (Nong Khai)** ออกแบบภายใต้แนวคิด **"เมืองพญานาคและมนต์เสน่ห์ริมฝั่งโขง"** โดดเด่นด้วยโทนสีเขียวมรกตและสีทองพญานาค พร้อมระบบแผนที่แบบ Interactive ที่ช่วยให้นักท่องเที่ยวและผู้ใช้งานสามารถสำรวจพิกัดและข้อมูลของสถานที่ต่างๆ ได้อย่างสะดวกรวดเร็ว

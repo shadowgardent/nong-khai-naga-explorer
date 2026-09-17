@@ -1,19 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Modal,
-  Platform,
   Pressable,
   SafeAreaView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import MapView, {
-  Callout,
-  MapMarker,
-  Marker,
-  PROVIDER_GOOGLE,
-} from 'react-native-maps';
+import { WebView } from 'react-native-webview';
 
 import { colors } from '../theme/colors';
 import type { PointOfInterest } from '../types/poi';
@@ -22,58 +16,145 @@ type PoiMapProps = {
   poi: PointOfInterest;
 };
 
-const MAP_DELTA = 0.015;
+const createLeafletHtml = (initialPoi: PointOfInterest, zoom = 15) => `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body, #map { width: 100%; height: 100%; background: #E2EFEA; }
+    .custom-marker {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 42px;
+      height: 42px;
+      background: #0B332B;
+      border: 3px solid #E5A93C;
+      border-radius: 50%;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.38);
+      font-size: 20px;
+      line-height: 42px;
+      text-align: center;
+    }
+    .leaflet-popup-content-wrapper {
+      background: #0B332B;
+      color: #FFFFFF;
+      border-radius: 14px;
+      border: 1.5px solid #E5A93C;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.4);
+      padding: 4px 6px;
+    }
+    .leaflet-popup-tip {
+      background: #0B332B;
+      border: 1.5px solid #E5A93C;
+    }
+    .popup-title {
+      font-weight: 800;
+      font-size: 13px;
+      color: #E5A93C;
+      margin-bottom: 2px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    .popup-address {
+      font-size: 11px;
+      color: #D2DFDB;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      line-height: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    var map = L.map('map', {
+      zoomControl: false,
+      attributionControl: false
+    }).setView([${initialPoi.latitude}, ${initialPoi.longitude}], ${zoom});
 
-const regionFor = (poi: PointOfInterest, delta = MAP_DELTA) => ({
-  latitude: poi.latitude,
-  longitude: poi.longitude,
-  latitudeDelta: delta,
-  longitudeDelta: delta,
-});
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      subdomains: ['a', 'b', 'c']
+    }).addTo(map);
+
+    var marker = L.marker([${initialPoi.latitude}, ${initialPoi.longitude}], {
+      icon: L.divIcon({
+        className: 'custom-marker',
+        html: '<span>' + ${JSON.stringify(initialPoi.icon)} + '</span>',
+        iconSize: [42, 42],
+        iconAnchor: [21, 21],
+        popupAnchor: [0, -22]
+      })
+    }).addTo(map);
+
+    marker.bindPopup('<div class="popup-title">' + ${JSON.stringify(initialPoi.name)} + '</div><div class="popup-address">' + ${JSON.stringify(initialPoi.address)} + '</div>').openPopup();
+
+    window.updatePoi = function(lat, lng, name, address, icon) {
+      map.flyTo([lat, lng], 15, { duration: 0.8 });
+      marker.setLatLng([lat, lng]);
+      marker.setIcon(L.divIcon({
+        className: 'custom-marker',
+        html: '<span>' + icon + '</span>',
+        iconSize: [42, 42],
+        iconAnchor: [21, 21],
+        popupAnchor: [0, -22]
+      }));
+      marker.bindPopup('<div class="popup-title">' + name + '</div><div class="popup-address">' + address + '</div>').openPopup();
+    };
+  </script>
+</body>
+</html>
+`;
 
 export function PoiMap({ poi }: PoiMapProps) {
-  const mapRef = useRef<MapView>(null);
-  const markerRef = useRef<MapMarker>(null);
-  const fullMapRef = useRef<MapView>(null);
+  const webViewRef = useRef<WebView>(null);
+  const fullWebViewRef = useRef<WebView>(null);
   const [isFullMapVisible, setFullMapVisible] = useState(false);
 
-  useEffect(() => {
-    mapRef.current?.animateToRegion(regionFor(poi), 550);
+  // HTML เริ่มต้นสร้างเพียงครั้งแรก จากนั้นสั่ง animate ด้วย JavaScript injection
+  const initialHtml = useMemo(() => createLeafletHtml(poi, 15), []);
+  const fullHtml = useMemo(() => createLeafletHtml(poi, 15), [isFullMapVisible]);
 
-    const timer = setTimeout(() => markerRef.current?.showCallout(), 650);
-    return () => clearTimeout(timer);
-  }, [poi.id, poi.latitude, poi.longitude]);
+  useEffect(() => {
+    const script = `
+      if (window.updatePoi) {
+        window.updatePoi(${poi.latitude}, ${poi.longitude}, ${JSON.stringify(poi.name)}, ${JSON.stringify(poi.address)}, ${JSON.stringify(poi.icon)});
+      }
+      true;
+    `;
+    webViewRef.current?.injectJavaScript(script);
+    if (isFullMapVisible) {
+      fullWebViewRef.current?.injectJavaScript(script);
+    }
+  }, [poi.id, poi.latitude, poi.longitude, isFullMapVisible]);
 
   const centerFullMap = () => {
-    fullMapRef.current?.animateToRegion(regionFor(poi, 0.01), 450);
+    const script = `
+      if (window.updatePoi) {
+        window.updatePoi(${poi.latitude}, ${poi.longitude}, ${JSON.stringify(poi.name)}, ${JSON.stringify(poi.address)}, ${JSON.stringify(poi.icon)});
+      }
+      true;
+    `;
+    fullWebViewRef.current?.injectJavaScript(script);
   };
 
   return (
     <>
       <View style={styles.frame}>
-        <MapView
-          ref={mapRef}
-          initialRegion={regionFor(poi)}
-          loadingEnabled
-          provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
-          showsCompass
+        <WebView
+          ref={webViewRef}
+          domStorageEnabled
+          javaScriptEnabled
+          originWhitelist={['*']}
+          scalesPageToFit={false}
+          scrollEnabled={false}
+          source={{ html: initialHtml }}
           style={styles.map}
-        >
-          <Marker
-            key={poi.id}
-            ref={markerRef}
-            coordinate={{ latitude: poi.latitude, longitude: poi.longitude }}
-            pinColor={colors.pin}
-            title={poi.name}
-          >
-            <Callout>
-              <View style={styles.callout}>
-                <Text style={styles.calloutTitle}>{poi.name}</Text>
-                <Text style={styles.calloutAddress}>{poi.address}</Text>
-              </View>
-            </Callout>
-          </Marker>
-        </MapView>
+        />
 
         <View pointerEvents="none" style={styles.mapLabel}>
           <Text style={styles.mapLabelEyebrow}>NONG KHAI LANDMARK</Text>
@@ -100,23 +181,16 @@ export function PoiMap({ poi }: PoiMapProps) {
         visible={isFullMapVisible}
       >
         <View style={styles.fullscreen}>
-          <MapView
-            ref={fullMapRef}
-            initialRegion={regionFor(poi, 0.01)}
-            loadingEnabled
-            provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
-            showsBuildings
-            showsCompass
-            showsScale
-            style={StyleSheet.absoluteFillObject}
-          >
-            <Marker
-              coordinate={{ latitude: poi.latitude, longitude: poi.longitude }}
-              description={poi.address}
-              pinColor={colors.pin}
-              title={poi.name}
-            />
-          </MapView>
+          <WebView
+            ref={fullWebViewRef}
+            domStorageEnabled
+            javaScriptEnabled
+            originWhitelist={['*']}
+            scalesPageToFit={false}
+            scrollEnabled={false}
+            source={{ html: fullHtml }}
+            style={styles.map}
+          />
 
           <SafeAreaView pointerEvents="box-none" style={styles.fullOverlay}>
             <View style={styles.fullTopBar}>
@@ -183,7 +257,9 @@ const styles = StyleSheet.create({
     elevation: 7,
   },
   map: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
+    width: '100%',
+    height: '100%',
   },
   mapLabel: {
     position: 'absolute',
@@ -229,21 +305,6 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '900',
     marginLeft: 4,
-  },
-  callout: {
-    width: 210,
-    paddingVertical: 3,
-  },
-  calloutTitle: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  calloutAddress: {
-    color: colors.textMuted,
-    fontSize: 10,
-    lineHeight: 14,
-    marginTop: 3,
   },
   fullscreen: {
     flex: 1,

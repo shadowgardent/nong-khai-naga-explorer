@@ -2,13 +2,6 @@ import type { ConfigContext, ExpoConfig } from 'expo/config';
 
 export default ({ config }: ConfigContext): ExpoConfig => {
   const androidMapsApiKey = process.env.GOOGLE_MAPS_ANDROID_API_KEY;
-  const isProductionBuild = process.env.EAS_BUILD_PROFILE === 'production';
-
-  if (isProductionBuild && !androidMapsApiKey) {
-    throw new Error(
-      'Production build ต้องกำหนด GOOGLE_MAPS_ANDROID_API_KEY ใน EAS Environment Variables',
-    );
-  }
 
   return {
     ...config,
@@ -16,15 +9,31 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     slug: 'nong-khai-poi',
     version: '1.0.0',
     orientation: 'portrait',
-    icon: './assets/khon-kaen-dino-icon.png',
+    icon: './assets/nong-khai-naga-icon.png',
     userInterfaceStyle: 'light',
-    splash: {
-      image: './assets/khon-kaen-dino-icon.png',
-      resizeMode: 'contain',
-      backgroundColor: '#0B332B',
-    },
+    plugins: [
+      'expo-status-bar',
+      [
+        'expo-splash-screen',
+        {
+          image: './assets/nong-khai-naga-icon.png',
+          resizeMode: 'contain',
+          backgroundColor: '#0B332B',
+        },
+      ],
+      ...(androidMapsApiKey
+        ? [
+            [
+              'react-native-maps',
+              {
+                androidGoogleMapsApiKey: androidMapsApiKey,
+              },
+            ] as [string, any],
+          ]
+        : []),
+    ],
     ios: {
-      icon: './assets/khon-kaen-dino-icon.png',
+      icon: './assets/nong-khai-naga-icon.png',
       supportsTablet: true,
       bundleIdentifier: 'com.nongkhai.explorer',
     },
@@ -32,7 +41,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       package: 'com.nongkhai.explorer',
       predictiveBackGestureEnabled: false,
       adaptiveIcon: {
-        foregroundImage: './assets/khon-kaen-dino-icon.png',
+        foregroundImage: './assets/nong-khai-naga-icon.png',
         backgroundColor: '#0B332B',
       },
       ...(androidMapsApiKey
@@ -46,7 +55,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         : {}),
     },
     web: {
-      favicon: './assets/khon-kaen-dino-favicon.png',
+      favicon: './assets/nong-khai-naga-icon.png',
     },
   };
 };

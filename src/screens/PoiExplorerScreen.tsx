@@ -1,146 +1,345 @@
-import { useRef, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useMemo, useRef, useState } from 'react';
+import {
+  Alert,
+  FlatList,
+  Linking,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 
 import { PoiMap } from '../components/PoiMap';
 import { pointsOfInterest } from '../data/pointsOfInterest';
 import { colors } from '../theme/colors';
-import type { PointOfInterest } from '../types/poi';
+import type { PoiCategoryGroup, PointOfInterest } from '../types/poi';
+
+const CATEGORY_TABS: { key: PoiCategoryGroup; label: string; icon: string; count: number }[] = [
+  { key: 'all', label: 'ทั้งหมด', icon: '🌟', count: 10 },
+  { key: 'sacred', label: 'สายมู & วัด', icon: '🛕', count: 3 },
+  { key: 'nature', label: 'ธรรมชาติ & วิวโขง', icon: '🌄', count: 3 },
+  { key: 'lifestyle', label: 'ชิมช้อป & แลนด์มาร์ก', icon: '🛍️', count: 4 },
+];
 
 export function PoiExplorerScreen() {
-  const [selectedPoi, setSelectedPoi] = useState(pointsOfInterest[0]);
+  const [selectedPoi, setSelectedPoi] = useState<PointOfInterest>(pointsOfInterest[0]);
+  const [activeCategory, setActiveCategory] = useState<PoiCategoryGroup>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const listRef = useRef<FlatList<PointOfInterest>>(null);
+
+  const filteredPois = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return pointsOfInterest.filter((item) => {
+      const matchCategory = activeCategory === 'all' || item.categoryGroup === activeCategory;
+      const matchSearch =
+        !query ||
+        item.name.toLowerCase().includes(query) ||
+        item.district.toLowerCase().includes(query) ||
+        item.tag.toLowerCase().includes(query) ||
+        item.address.toLowerCase().includes(query) ||
+        item.description.toLowerCase().includes(query);
+      return matchCategory && matchSearch;
+    });
+  }, [activeCategory, searchQuery]);
 
   const selectPoi = (poi: PointOfInterest) => {
     setSelectedPoi(poi);
     setTimeout(() => {
-      listRef.current?.scrollToOffset({ offset: 340, animated: true });
-    }, 80);
+      listRef.current?.scrollToOffset({ offset: 330, animated: true });
+    }, 100);
+  };
+
+  const openNavigation = (poi: PointOfInterest) => {
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${poi.latitude},${poi.longitude}`;
+    Linking.openURL(url).catch(() => {
+      Alert.alert('เปิดแผนที่ไม่สำเร็จ', 'กรุณาลองใหม่อีกครั้ง');
+    });
+  };
+
+  const showCoordinates = (poi: PointOfInterest) => {
+    Alert.alert(
+      'พิกัด GPS',
+      `${poi.name}\n\nLatitude: ${poi.latitude.toFixed(5)}\nLongitude: ${poi.longitude.toFixed(5)}`,
+    );
   };
 
   return (
     <FlatList
       ref={listRef}
       contentContainerStyle={styles.content}
-      data={pointsOfInterest}
+      data={filteredPois}
       keyExtractor={(item) => item.id}
+      keyboardShouldPersistTaps="handled"
+      ListEmptyComponent={
+        <View style={styles.emptyWrap}>
+          <Text style={styles.emptyIcon}>🔍</Text>
+          <Text style={styles.emptyTitle}>ไม่พบสถานที่ที่ค้นหา</Text>
+          <Text style={styles.emptyDesc}>ลองค้นหาด้วยคำอื่น หรือเลือกหมวดหมู่อื่นดูนะครับ</Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              setSearchQuery('');
+              setActiveCategory('all');
+            }}
+            style={({ pressed }) => [styles.resetButton, pressed && styles.pressed]}
+          >
+            <Text style={styles.resetButtonText}>รีเซ็ตการค้นหา</Text>
+          </Pressable>
+        </View>
+      }
       ListHeaderComponent={
         <View>
-          <View style={styles.hero}>
-            <View style={styles.orbitLarge} />
-            <View style={styles.orbitSmall} />
-            <View style={styles.heroTopRow}>
-              <View style={styles.brandLockup}>
-                <View style={styles.brandBadgeIcon}>
-                  <Text style={styles.brandEmoji}>🐉</Text>
-                </View>
-                <View>
-                  <Text style={styles.brandEyebrow}>NONG KHAI</Text>
-                  <Text style={styles.brandName}>NAGA EXPLORER</Text>
+          {/* Header & Hero Section */}
+          <View style={styles.heroBanner}>
+            <View style={styles.nagaWavePattern} />
+            <View style={styles.nagaWaterGlow} />
+
+            <View style={styles.headerTopBar}>
+              <View style={styles.brandBadge}>
+                <Text style={styles.brandIcon}>🐉</Text>
+                <View style={styles.brandTextWrap}>
+                  <Text style={styles.brandSub}>NONG KHAI · THAILAND</Text>
+                  <Text style={styles.brandTitle}>NAGA EXPLORER</Text>
                 </View>
               </View>
-              <View style={styles.heroBadge}>
-                <Text style={styles.heroBadgeNumber}>10</Text>
-                <Text style={styles.heroBadgeText}>PLACES</Text>
+              <View style={styles.mekongTag}>
+                <Text style={styles.mekongTagDot}>🌊</Text>
+                <Text style={styles.mekongTagText}>ริมฝั่งโขง</Text>
               </View>
             </View>
 
-            <Text style={styles.heroTitle}>เยือนแดนพญานาค{`\n`}เลาะริมโขงหนองคาย</Text>
-            <Text style={styles.heroSubtitle}>
-              สัมผัสมนต์เสน่ห์ริมฝั่งโขง วัฒนธรรม และแหล่งท่องเที่ยวอันซีน เลือกสถานที่แล้วออกเดินทาง
+            <Text style={styles.heroHeading}>
+              มนต์เสน่ห์แดนพญานาค{`\n`}เยือนเมืองริมโขงหนองคาย
+            </Text>
+            <Text style={styles.heroDescription}>
+              สำรวจ 10 พิกัดไฮไลท์ ไหว้พระศักดิ์สิทธิ์ ชมทะเลหมอก 360 องศา และสัมผัสวัฒนธรรมอินโดจีน
             </Text>
 
-            <View style={styles.heroChips}>
-              <View style={styles.heroChipGold}>
-                <Text style={styles.heroChipGoldText}>🐉 NAGA CITY</Text>
+            <View style={styles.statsPills}>
+              <View style={styles.statPillGold}>
+                <Text style={styles.statPillGoldText}>📍 10 แลนด์มาร์ก</Text>
               </View>
-              <View style={styles.heroChipDark}>
-                <Text style={styles.heroChipDarkText}>🌊 MEKONG RIVER</Text>
+              <View style={styles.statPillDark}>
+                <Text style={styles.statPillDarkText}>🧭 เมือง & สังคม</Text>
+              </View>
+              <View style={styles.statPillDark}>
+                <Text style={styles.statPillDarkText}>🗺️ OpenStreetMap</Text>
               </View>
             </View>
           </View>
 
-          <View style={styles.mapSectionHeader}>
+          {/* Search Bar */}
+          <View style={styles.searchContainer}>
+            <Text style={styles.searchIcon}>🔍</Text>
+            <TextInput
+              clearButtonMode="while-editing"
+              onChangeText={setSearchQuery}
+              placeholder="ค้นหาวัด, ทะเลหมอก, ริมโขง, อำเภอ..."
+              placeholderTextColor={colors.textSubtle}
+              style={styles.searchInput}
+              value={searchQuery}
+            />
+            {searchQuery.length > 0 && (
+              <Pressable
+                accessibilityLabel="ล้างคำค้นหา"
+                onPress={() => setSearchQuery('')}
+                style={styles.clearSearchBtn}
+              >
+                <Text style={styles.clearSearchText}>✕</Text>
+              </Pressable>
+            )}
+          </View>
+
+          {/* Category Filter Tabs */}
+          <ScrollView
+            contentContainerStyle={styles.categoryScroll}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+          >
+            {CATEGORY_TABS.map((tab) => {
+              const isActive = activeCategory === tab.key;
+              return (
+                <Pressable
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: isActive }}
+                  key={tab.key}
+                  onPress={() => setActiveCategory(tab.key)}
+                  style={({ pressed }) => [
+                    styles.categoryChip,
+                    isActive && styles.categoryChipActive,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <Text style={styles.categoryChipIcon}>{tab.icon}</Text>
+                  <Text
+                    style={[
+                      styles.categoryChipLabel,
+                      isActive && styles.categoryChipLabelActive,
+                    ]}
+                  >
+                    {tab.label}
+                  </Text>
+                  <View
+                    style={[
+                      styles.categoryChipCount,
+                      isActive && styles.categoryChipCountActive,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.categoryChipCountText,
+                        isActive && styles.categoryChipCountTextActive,
+                      ]}
+                    >
+                      {tab.count}
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+
+          {/* Interactive Map Header */}
+          <View style={styles.mapHeaderRow}>
             <View>
-              <Text style={styles.sectionEyebrow}>INTERACTIVE MAP</Text>
-              <Text style={styles.sectionTitle}>แผนที่นำทาง</Text>
-              <Text style={styles.sectionSubtitle}>แตะ “ขยายแผนที่” เพื่อเปิดมุมมองเต็มจอ</Text>
+              <Text style={styles.sectionEyebrow}>OPENSTREETMAP INTERACTIVE</Text>
+              <Text style={styles.sectionTitle}>แผนที่นำทางพิกัดจริง</Text>
             </View>
-            <View style={styles.liveBadge}>
-              <Text style={styles.liveDot}>●</Text>
-              <Text style={styles.liveText}>SELECTED</Text>
-            </View>
-          </View>
-
-          <PoiMap poi={selectedPoi} />
-
-          <View style={styles.selectedCard}>
-            <View style={styles.selectedTopRow}>
-              <View style={styles.selectedIcon}>
-                <Text style={styles.selectedIconText}>{selectedPoi.icon}</Text>
-              </View>
-              <View style={styles.selectedCopy}>
-                <Text style={styles.selectedCategory}>{selectedPoi.category}</Text>
-                <Text style={styles.selectedName}>{selectedPoi.name}</Text>
-              </View>
-              <View style={styles.selectedMark}>
-                <Text style={styles.selectedMarkText}>✓</Text>
-              </View>
-            </View>
-
-            <Text style={styles.selectedAddress}>⌖ {selectedPoi.address}</Text>
-            <Text style={styles.selectedDescription}>{selectedPoi.description}</Text>
-
-            <View style={styles.coordinateBar}>
-              <Text style={styles.coordinateLabel}>COORDINATES</Text>
-              <Text style={styles.coordinates}>
-                {selectedPoi.latitude.toFixed(5)} · {selectedPoi.longitude.toFixed(5)}
+            <View style={styles.activePinBadge}>
+              <Text style={styles.activePinDot}>●</Text>
+              <Text numberOfLines={1} style={styles.activePinText}>
+                {selectedPoi.name}
               </Text>
             </View>
           </View>
 
-          <View style={styles.listHeader}>
-            <View>
-              <Text style={styles.sectionEyebrow}>RECOMMENDED LANDMARKS</Text>
-              <Text style={styles.sectionTitle}>10 สถานที่น่าสนใจ</Text>
+          {/* Map Component */}
+          <PoiMap poi={selectedPoi} />
+
+          {/* Detailed Guide Card of Selected POI */}
+          <View style={styles.travelGuideCard}>
+            <View style={styles.goldHeaderStrip} />
+
+            <View style={styles.guideTopRow}>
+              <View style={styles.guideIconBubble}>
+                <Text style={styles.guideIconEmoji}>{selectedPoi.icon}</Text>
+              </View>
+              <View style={styles.guideTitleWrap}>
+                <View style={styles.badgeRow}>
+                  <View style={styles.districtBadge}>
+                    <Text style={styles.districtBadgeText}>📍 {selectedPoi.district}</Text>
+                  </View>
+                  <View style={styles.tagBadge}>
+                    <Text style={styles.tagBadgeText}>✨ {selectedPoi.tag}</Text>
+                  </View>
+                </View>
+                <Text style={styles.guideName}>{selectedPoi.name}</Text>
+                <Text style={styles.guideCategory}>{selectedPoi.category}</Text>
+              </View>
             </View>
-            <Text style={styles.listHint}>แตะเพื่อดูพิกัด</Text>
+
+            <Text style={styles.guideDescription}>{selectedPoi.description}</Text>
+
+            <View style={styles.infoBox}>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>🕒 เวลาแนะนำ:</Text>
+                <Text style={styles.infoValue}>{selectedPoi.bestTime}</Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>📌 ที่ตั้ง:</Text>
+                <Text numberOfLines={2} style={styles.infoValue}>
+                  {selectedPoi.address}
+                </Text>
+              </View>
+            </View>
+
+            {/* Travel Action Buttons */}
+            <View style={styles.actionRow}>
+              <Pressable
+                accessibilityLabel="นำทางไปยังสถานที่นี้ด้วย Google Maps"
+                accessibilityRole="button"
+                onPress={() => openNavigation(selectedPoi)}
+                style={({ pressed }) => [styles.navigateBtn, pressed && styles.pressed]}
+              >
+                <Text style={styles.navigateBtnIcon}>🧭</Text>
+                <Text style={styles.navigateBtnText}>เปิดเส้นทางนำทาง</Text>
+              </Pressable>
+
+              <Pressable
+                accessibilityLabel="ดูพิกัด GPS"
+                accessibilityRole="button"
+                onPress={() => showCoordinates(selectedPoi)}
+                style={({ pressed }) => [styles.gpsBtn, pressed && styles.pressed]}
+              >
+                <Text style={styles.gpsBtnText}>
+                  🌐 {selectedPoi.latitude.toFixed(4)}, {selectedPoi.longitude.toFixed(4)}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+
+          {/* Landmark List Header */}
+          <View style={styles.listHeaderRow}>
+            <View>
+              <Text style={styles.sectionEyebrow}>NONG KHAI PLACES</Text>
+              <Text style={styles.sectionTitle}>
+                รายการสถานที่ ({filteredPois.length} แห่ง)
+              </Text>
+            </View>
+            <Text style={styles.listSubtitleHint}>แตะเพื่อขยับแผนที่</Text>
           </View>
         </View>
       }
       renderItem={({ item, index }) => {
-        const selected = item.id === selectedPoi.id;
+        const isSelected = item.id === selectedPoi.id;
 
         return (
           <Pressable
-            accessibilityHint="แสดงตำแหน่งสถานที่นี้บนแผนที่"
+            accessibilityHint="แตะเพื่อเลื่อนแผนที่มายังจุดนี้"
             accessibilityRole="button"
-            accessibilityState={{ selected }}
+            accessibilityState={{ selected: isSelected }}
             onPress={() => selectPoi(item)}
             style={({ pressed }) => [
-              styles.poiCard,
-              selected && styles.poiCardSelected,
+              styles.nagaCard,
+              isSelected && styles.nagaCardActive,
               pressed && styles.pressed,
             ]}
           >
-            <View style={[styles.index, selected && styles.indexSelected]}>
-              <Text style={[styles.indexText, selected && styles.indexTextSelected]}>
+            <View style={[styles.cardRank, isSelected && styles.cardRankActive]}>
+              <Text style={[styles.cardRankText, isSelected && styles.cardRankTextActive]}>
                 {String(index + 1).padStart(2, '0')}
               </Text>
             </View>
-            <View style={[styles.poiIcon, selected && styles.poiIconSelected]}>
-              <Text style={styles.poiIconText}>{item.icon}</Text>
+
+            <View style={[styles.cardIconBox, isSelected && styles.cardIconBoxActive]}>
+              <Text style={styles.cardIconText}>{item.icon}</Text>
             </View>
-            <View style={styles.poiCopy}>
-              <Text style={[styles.poiName, selected && styles.poiNameSelected]}>
+
+            <View style={styles.cardBody}>
+              <View style={styles.cardMetaRow}>
+                <Text style={[styles.cardDistrict, isSelected && styles.cardDistrictActive]}>
+                  {item.district}
+                </Text>
+                <Text style={[styles.cardTag, isSelected && styles.cardTagActive]}>
+                  · {item.tag}
+                </Text>
+              </View>
+              <Text style={[styles.cardTitle, isSelected && styles.cardTitleActive]}>
                 {item.name}
               </Text>
-              <Text numberOfLines={1} style={[styles.poiMeta, selected && styles.poiMetaSelected]}>
-                {item.category} · {item.address}
+              <Text
+                numberOfLines={1}
+                style={[styles.cardAddress, isSelected && styles.cardAddressActive]}
+              >
+                🕒 {item.bestTime} · {item.address}
               </Text>
             </View>
-            <View style={[styles.chevronBubble, selected && styles.chevronBubbleSelected]}>
-              <Text style={[styles.chevron, selected && styles.chevronSelected]}>
-                {selected ? '✓' : '›'}
+
+            <View style={[styles.cardSelectBtn, isSelected && styles.cardSelectBtnActive]}>
+              <Text style={[styles.cardSelectBtnText, isSelected && styles.cardSelectBtnTextActive]}>
+                {isSelected ? '✓ หมุดนี้' : 'ดูพิกัด'}
               </Text>
             </View>
           </Pressable>
@@ -154,148 +353,230 @@ export function PoiExplorerScreen() {
 const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 16,
-    paddingBottom: 40,
+    paddingBottom: 48,
   },
-  hero: {
+  heroBanner: {
     overflow: 'hidden',
     borderRadius: 28,
     backgroundColor: colors.navy,
     padding: 22,
     marginTop: 8,
+    borderWidth: 1.5,
+    borderColor: colors.gold,
     shadowColor: colors.navy,
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.22,
-    shadowRadius: 20,
-    elevation: 9,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 18,
+    elevation: 8,
   },
-  orbitLarge: {
+  nagaWavePattern: {
     position: 'absolute',
-    width: 220,
-    height: 220,
-    top: -90,
-    right: -60,
-    borderRadius: 110,
-    borderWidth: 32,
-    borderColor: 'rgba(229,169,60,0.14)',
+    width: 260,
+    height: 260,
+    top: -100,
+    right: -80,
+    borderRadius: 130,
+    borderWidth: 36,
+    borderColor: 'rgba(229,169,60,0.12)',
   },
-  orbitSmall: {
+  nagaWaterGlow: {
     position: 'absolute',
-    width: 100,
-    height: 100,
-    bottom: -40,
-    left: 110,
-    borderRadius: 50,
-    backgroundColor: 'rgba(13,110,84,0.3)',
+    width: 140,
+    height: 140,
+    bottom: -50,
+    left: 80,
+    borderRadius: 70,
+    backgroundColor: 'rgba(18,90,107,0.35)',
   },
-  heroTopRow: {
+  headerTopBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  brandLockup: {
+  brandBadge: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  brandBadgeIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 16,
-    backgroundColor: 'rgba(229,169,60,0.2)',
-    borderWidth: 1,
-    borderColor: colors.gold,
-    alignItems: 'center',
+  brandIcon: {
+    fontSize: 32,
+    marginRight: 10,
+  },
+  brandTextWrap: {
     justifyContent: 'center',
-    marginRight: 12,
   },
-  brandEmoji: {
-    fontSize: 26,
-  },
-  brandEyebrow: {
+  brandSub: {
     color: colors.gold,
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '900',
-    letterSpacing: 2,
+    letterSpacing: 1.5,
   },
-  brandName: {
+  brandTitle: {
     color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '900',
-    letterSpacing: 0.6,
-    marginTop: 2,
-  },
-  heroBadge: {
-    width: 52,
-    height: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-  },
-  heroBadgeNumber: {
-    color: colors.gold,
-    fontSize: 18,
-    lineHeight: 20,
-    fontWeight: '900',
-  },
-  heroBadgeText: {
-    color: '#E0EDE8',
-    fontSize: 7,
+    fontSize: 16,
     fontWeight: '900',
     letterSpacing: 0.8,
+    marginTop: 2,
   },
-  heroTitle: {
+  mekongTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(229,169,60,0.4)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  mekongTagDot: {
+    fontSize: 11,
+    marginRight: 4,
+  },
+  mekongTagText: {
+    color: '#E3F2ED',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  heroHeading: {
     color: '#FFFFFF',
-    fontSize: 27,
-    lineHeight: 36,
+    fontSize: 25,
+    lineHeight: 34,
     fontWeight: '900',
-    marginTop: 22,
+    marginTop: 18,
   },
-  heroSubtitle: {
-    maxWidth: 320,
-    color: '#C5D8D3',
+  heroDescription: {
+    color: '#C6DDD6',
     fontSize: 12,
     lineHeight: 18,
     marginTop: 8,
   },
-  heroChips: {
+  statsPills: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 18,
+    flexWrap: 'wrap',
+    marginTop: 16,
+    gap: 6,
   },
-  heroChipGold: {
+  statPillGold: {
     borderRadius: 999,
     backgroundColor: colors.gold,
     paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingVertical: 6,
   },
-  heroChipGoldText: {
+  statPillGoldText: {
     color: colors.navy,
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '900',
-    letterSpacing: 0.4,
   },
-  heroChipDark: {
+  statPillDark: {
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderColor: 'rgba(255,255,255,0.18)',
     backgroundColor: 'rgba(255,255,255,0.08)',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    marginLeft: 8,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
   },
-  heroChipDarkText: {
+  statPillDarkText: {
     color: '#FFFFFF',
-    fontSize: 9,
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 18,
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginTop: 16,
+    shadowColor: colors.navy,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  searchIcon: {
+    fontSize: 16,
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 13,
+    padding: 0,
+    fontWeight: '600',
+  },
+  clearSearchBtn: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#E2ECE8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clearSearchText: {
+    color: colors.textMuted,
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  categoryScroll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    paddingBottom: 4,
+    gap: 8,
+  },
+  categoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 999,
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  categoryChipActive: {
+    backgroundColor: colors.navy,
+    borderColor: colors.gold,
+  },
+  categoryChipIcon: {
+    fontSize: 13,
+    marginRight: 6,
+  },
+  categoryChipLabel: {
+    color: colors.text,
+    fontSize: 11,
     fontWeight: '800',
   },
-  mapSectionHeader: {
+  categoryChipLabelActive: {
+    color: '#FFFFFF',
+  },
+  categoryChipCount: {
+    borderRadius: 999,
+    backgroundColor: '#E8F1ED',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginLeft: 6,
+  },
+  categoryChipCountActive: {
+    backgroundColor: colors.gold,
+  },
+  categoryChipCountText: {
+    color: colors.textMuted,
+    fontSize: 9,
+    fontWeight: '900',
+  },
+  categoryChipCountTextActive: {
+    color: colors.navy,
+  },
+  mapHeaderRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
-    marginTop: 28,
-    marginBottom: 12,
+    marginTop: 22,
+    marginBottom: 10,
     paddingHorizontal: 4,
   },
   sectionEyebrow: {
@@ -303,41 +584,36 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '900',
     letterSpacing: 1.2,
-    marginBottom: 2,
   },
   sectionTitle: {
     color: colors.text,
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '900',
-  },
-  sectionSubtitle: {
-    color: colors.textMuted,
-    fontSize: 11,
     marginTop: 2,
   },
-  liveBadge: {
+  activePinBadge: {
     flexDirection: 'row',
     alignItems: 'center',
+    maxWidth: 160,
     borderRadius: 999,
-    backgroundColor: '#D1EAE2',
+    backgroundColor: '#D7EBE3',
     paddingHorizontal: 10,
-    paddingVertical: 6,
-    marginBottom: 2,
+    paddingVertical: 5,
   },
-  liveDot: {
+  activePinDot: {
     color: colors.emerald,
     fontSize: 8,
     marginRight: 5,
   },
-  liveText: {
-    color: colors.emerald,
-    fontSize: 8,
-    fontWeight: '900',
-    letterSpacing: 0.5,
+  activePinText: {
+    color: colors.navy,
+    fontSize: 9,
+    fontWeight: '800',
   },
-  selectedCard: {
+  travelGuideCard: {
+    overflow: 'hidden',
     borderRadius: 24,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.border,
     backgroundColor: colors.surface,
     padding: 16,
@@ -348,198 +624,318 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
     elevation: 3,
   },
-  selectedTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  goldHeaderStrip: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 4,
+    backgroundColor: colors.gold,
   },
-  selectedIcon: {
-    width: 50,
-    height: 50,
+  guideTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginTop: 4,
+  },
+  guideIconBubble: {
+    width: 52,
+    height: 52,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 16,
+    borderRadius: 18,
     backgroundColor: colors.surfaceWarm,
+    borderWidth: 1.5,
+    borderColor: colors.gold,
   },
-  selectedIconText: {
-    fontSize: 24,
+  guideIconEmoji: {
+    fontSize: 26,
   },
-  selectedCopy: {
+  guideTitleWrap: {
     flex: 1,
     marginLeft: 12,
   },
-  selectedCategory: {
-    color: colors.emerald,
-    fontSize: 9,
-    fontWeight: '900',
-    letterSpacing: 0.5,
-  },
-  selectedName: {
-    color: colors.text,
-    fontSize: 16,
-    lineHeight: 22,
-    fontWeight: '900',
-    marginTop: 2,
-  },
-  selectedMark: {
-    width: 28,
-    height: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 10,
-    backgroundColor: colors.gold,
-    marginLeft: 8,
-  },
-  selectedMarkText: {
-    color: colors.navy,
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  selectedAddress: {
-    color: colors.textMuted,
-    fontSize: 10,
-    lineHeight: 15,
-    marginTop: 12,
-  },
-  selectedDescription: {
-    color: colors.textMuted,
-    fontSize: 11,
-    lineHeight: 17,
-    marginTop: 6,
-  },
-  coordinateBar: {
+  badgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    borderRadius: 12,
-    backgroundColor: '#E7F0ED',
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    marginTop: 12,
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 4,
   },
-  coordinateLabel: {
+  districtBadge: {
+    borderRadius: 6,
+    backgroundColor: '#E2EFEA',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  districtBadgeText: {
+    color: colors.primaryDark,
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  tagBadge: {
+    borderRadius: 6,
+    backgroundColor: colors.goldLight,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  tagBadgeText: {
+    color: colors.goldDark,
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  guideName: {
+    color: colors.text,
+    fontSize: 17,
+    lineHeight: 23,
+    fontWeight: '900',
+  },
+  guideCategory: {
     color: colors.textMuted,
-    fontSize: 8,
-    fontWeight: '900',
-    letterSpacing: 0.8,
-  },
-  coordinates: {
-    color: colors.emeraldDark,
     fontSize: 10,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  guideDescription: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 10,
+  },
+  infoBox: {
+    borderRadius: 14,
+    backgroundColor: colors.surfaceMuted,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    padding: 12,
+    marginTop: 12,
+    gap: 6,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  infoLabel: {
+    width: 80,
+    color: colors.textMuted,
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  infoValue: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 14,
+    gap: 8,
+  },
+  navigateBtn: {
+    flex: 1.4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    backgroundColor: colors.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  navigateBtnIcon: {
+    fontSize: 14,
+    marginRight: 6,
+  },
+  navigateBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
     fontWeight: '900',
+  },
+  gpsBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+  },
+  gpsBtnText: {
+    color: colors.textMuted,
+    fontSize: 9,
+    fontWeight: '800',
     fontVariant: ['tabular-nums'],
   },
-  listHeader: {
+  listHeaderRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
-    marginTop: 30,
+    marginTop: 28,
     marginBottom: 12,
     paddingHorizontal: 4,
   },
-  listHint: {
+  listSubtitleHint: {
     color: colors.textMuted,
     fontSize: 10,
-    marginBottom: 3,
+    fontWeight: '600',
   },
-  poiCard: {
+  nagaCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 74,
-    borderRadius: 20,
-    borderWidth: 1,
+    borderRadius: 18,
+    borderWidth: 1.5,
     borderColor: colors.border,
     backgroundColor: colors.surface,
     padding: 12,
     marginBottom: 10,
   },
-  poiCardSelected: {
-    borderWidth: 2,
+  nagaCardActive: {
     borderColor: colors.gold,
     backgroundColor: colors.navy,
     shadowColor: colors.navy,
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.16,
-    shadowRadius: 14,
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
     elevation: 4,
   },
-  index: {
-    width: 32,
-    height: 32,
+  cardRank: {
+    width: 30,
+    height: 30,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 10,
-    backgroundColor: '#E8F1ED',
+    borderRadius: 8,
+    backgroundColor: '#E7F1ED',
   },
-  indexSelected: {
+  cardRankActive: {
     backgroundColor: colors.gold,
   },
-  indexText: {
+  cardRankText: {
     color: colors.textMuted,
     fontSize: 10,
     fontWeight: '900',
   },
-  indexTextSelected: {
+  cardRankTextActive: {
     color: colors.navy,
   },
-  poiIcon: {
-    width: 40,
-    height: 40,
+  cardIconBox: {
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 12,
+    borderRadius: 14,
     backgroundColor: colors.surfaceWarm,
-    marginLeft: 8,
+    marginLeft: 10,
   },
-  poiIconSelected: {
+  cardIconBoxActive: {
     backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: colors.gold,
   },
-  poiIconText: {
-    fontSize: 20,
+  cardIconText: {
+    fontSize: 22,
   },
-  poiCopy: {
+  cardBody: {
     flex: 1,
     marginLeft: 10,
   },
-  poiName: {
+  cardMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  cardDistrict: {
+    color: colors.emerald,
+    fontSize: 9,
+    fontWeight: '900',
+  },
+  cardDistrictActive: {
+    color: colors.gold,
+  },
+  cardTag: {
+    color: colors.textMuted,
+    fontSize: 9,
+    fontWeight: '600',
+    marginLeft: 3,
+  },
+  cardTagActive: {
+    color: '#D2DFDB',
+  },
+  cardTitle: {
     color: colors.text,
     fontSize: 13,
     fontWeight: '900',
+    marginTop: 2,
   },
-  poiNameSelected: {
+  cardTitleActive: {
     color: '#FFFFFF',
   },
-  poiMeta: {
+  cardAddress: {
     color: colors.textMuted,
     fontSize: 9,
     marginTop: 3,
   },
-  poiMetaSelected: {
-    color: '#C5D8D3',
+  cardAddressActive: {
+    color: '#B6D1C9',
   },
-  chevronBubble: {
-    width: 28,
-    height: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
+  cardSelectBtn: {
     borderRadius: 10,
     backgroundColor: '#EBF3F0',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
     marginLeft: 8,
   },
-  chevronBubbleSelected: {
+  cardSelectBtnActive: {
     backgroundColor: colors.gold,
   },
-  chevron: {
-    color: colors.textMuted,
-    fontSize: 18,
-    lineHeight: 19,
+  cardSelectBtnText: {
+    color: colors.primaryDark,
+    fontSize: 10,
+    fontWeight: '900',
   },
-  chevronSelected: {
+  cardSelectBtnTextActive: {
     color: colors.navy,
+  },
+  emptyWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 36,
+    paddingHorizontal: 20,
+  },
+  emptyIcon: {
+    fontSize: 40,
+    marginBottom: 10,
+  },
+  emptyTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  emptyDesc: {
+    color: colors.textMuted,
     fontSize: 12,
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  resetButton: {
+    borderRadius: 12,
+    backgroundColor: colors.gold,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginTop: 14,
+  },
+  resetButtonText: {
+    color: colors.navy,
+    fontSize: 11,
     fontWeight: '900',
   },
   pressed: {
-    opacity: 0.72,
-    transform: [{ scale: 0.985 }],
+    opacity: 0.76,
+    transform: [{ scale: 0.98 }],
   },
 });
