@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Platform,
@@ -18,31 +18,10 @@ import {
 export function NotificationBanner() {
   const topInset = Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 10 : 44;
   const [activeNotification, setActiveNotification] = useState<Notification | null>(null);
-  const slideAnim = React.useRef(new Animated.Value(-150)).current;
+  const slideAnim = useRef(new Animated.Value(-150)).current;
+  const dismissTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    const sub = addNotificationBannerListener((notification) => {
-      setActiveNotification(notification);
-
-      // เลื่อน Banner ลงมา
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        useNativeDriver: true,
-        bounciness: 6,
-      }).start();
-
-      // ปิดอัตโนมัติหลังจาก 7 วินาที
-      const autoDismiss = setTimeout(() => {
-        dismissBanner();
-      }, 7000);
-
-      return () => clearTimeout(autoDismiss);
-    });
-
-    return () => sub.remove();
-  }, [slideAnim]);
-
-  const dismissBanner = () => {
+  const dismissBanner = useCallback(() => {
     Animated.timing(slideAnim, {
       toValue: -150,
       duration: 250,
@@ -50,14 +29,45 @@ export function NotificationBanner() {
     }).start(() => {
       setActiveNotification(null);
     });
-  };
+  }, [slideAnim]);
 
-  const handleBannerPress = () => {
+  useEffect(() => {
+    const sub = addNotificationBannerListener((notification) => {
+      setActiveNotification(notification);
+
+      // เลื่อน Banner ลงมาจากขอบบนจอ
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        useNativeDriver: true,
+        bounciness: 6,
+      }).start();
+
+      // ปิดอัตโนมัติหลังจาก 7 วินาที
+      if (dismissTimeoutRef.current) {
+        clearTimeout(dismissTimeoutRef.current);
+      }
+      dismissTimeoutRef.current = setTimeout(() => {
+        dismissBanner();
+      }, 7000);
+    });
+
+    return () => {
+      sub.remove();
+      if (dismissTimeoutRef.current) {
+        clearTimeout(dismissTimeoutRef.current);
+      }
+    };
+  }, [slideAnim, dismissBanner]);
+
+  const handleBannerPress = useCallback(() => {
     if (!activeNotification) return;
     const notif = activeNotification;
+    if (dismissTimeoutRef.current) {
+      clearTimeout(dismissTimeoutRef.current);
+    }
     dismissBanner();
     emitNotificationResponse(notif);
-  };
+  }, [activeNotification, dismissBanner]);
 
   if (!activeNotification) return null;
 
@@ -116,9 +126,10 @@ const styles = StyleSheet.create({
     left: 14,
     right: 14,
     zIndex: 9999,
+    elevation: 10,
   },
   bannerInner: {
-    backgroundColor: colors.surfaceDark,
+    backgroundColor: colors.surfaceDark ?? '#0B332B',
     borderRadius: 18,
     borderWidth: 1.5,
     borderColor: colors.gold,
