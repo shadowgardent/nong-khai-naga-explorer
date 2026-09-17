@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   FlatList,
@@ -23,11 +23,54 @@ const CATEGORY_TABS: { key: PoiCategoryGroup; label: string; icon: string; count
   { key: 'lifestyle', label: 'ชิมช้อป & แลนด์มาร์ก', icon: '🛍️', count: 4 },
 ];
 
-export function PoiExplorerScreen() {
+type PoiExplorerScreenProps = {
+  /** poiId ที่ส่งมาจาก App.tsx เมื่อผู้ใช้แตะ Notification เพื่อโฟกัสสถานที่นั้นอัตโนมัติ */
+  notificationPoiId?: string | null;
+  /** Callback เมื่อจัดการโฟกัสสถานที่เสร็จแล้ว */
+  onHandledNotification?: () => void;
+};
+
+export function PoiExplorerScreen({
+  notificationPoiId,
+  onHandledNotification,
+}: PoiExplorerScreenProps) {
   const [selectedPoi, setSelectedPoi] = useState<PointOfInterest>(pointsOfInterest[0]);
   const [activeCategory, setActiveCategory] = useState<PoiCategoryGroup>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const listRef = useRef<FlatList<PointOfInterest>>(null);
+
+  // In-App Reminder timer (สำหรับรันบน Expo Go 100% ป้องกัน crash บน Android)
+  const [activeReminderPoiId, setActiveReminderPoiId] = useState<string | null>(null);
+  const reminderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (reminderTimerRef.current) {
+        clearTimeout(reminderTimerRef.current);
+      }
+    };
+  }, []);
+
+  // -----------------------------------------------------------------
+  // Deep Link Handler: รับ poiId จาก Notification
+  // ทำงานทั้งตอน Cold Start, Background, และ Foreground อย่างแม่นยำ
+  // -----------------------------------------------------------------
+  useEffect(() => {
+    if (!notificationPoiId) return;
+
+    const target = pointsOfInterest.find((p) => p.id === notificationPoiId);
+    if (target) {
+      // รีเซ็ต filter ให้เห็นสถานที่นั้น แล้วโฟกัส
+      setActiveCategory('all');
+      setSearchQuery('');
+      setSelectedPoi(target);
+      setTimeout(() => {
+        listRef.current?.scrollToOffset({ offset: 330, animated: true });
+      }, 250);
+    }
+
+    onHandledNotification?.();
+  }, [notificationPoiId, onHandledNotification]);
 
   const filteredPois = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -64,6 +107,52 @@ export function PoiExplorerScreen() {
       `${poi.name}\n\nLatitude: ${poi.latitude.toFixed(5)}\nLongitude: ${poi.longitude.toFixed(5)}`,
     );
   };
+
+  // -----------------------------------------------------------------
+  // ตั้งการแจ้งเตือน In-App Reminder (5 วินาที สำหรับทดสอบ/สาธิตใน Expo Go)
+  // -----------------------------------------------------------------
+  const handleScheduleReminder = useCallback((poi: PointOfInterest) => {
+    if (reminderTimerRef.current) {
+      clearTimeout(reminderTimerRef.current);
+    }
+    setActiveReminderPoiId(poi.id);
+
+    Alert.alert(
+      '🔔 ตั้งเตือนความจำแล้ว',
+      `ระบบจะแจ้งเตือนการท่องเที่ยว "${poi.name}" ในอีก 5 วินาที\n(รองรับ 100% บน Expo Go)`,
+      [{ text: 'ตกลง' }],
+    );
+
+    reminderTimerRef.current = setTimeout(() => {
+      setActiveReminderPoiId(null);
+      Alert.alert(
+        '🔔 ถึงเวลาท่องเที่ยวหนองคาย!',
+        `ได้เวลาไปเยือน "${poi.name}" (${poi.district}) แล้ว!\n\n💡 เวลาแนะนำ: ${poi.bestTime}\n📍 ไฮไลต์: ${poi.tag}`,
+        [
+          { text: 'ปิด', style: 'cancel' },
+          {
+            text: '📍 ดูบนแผนที่',
+            onPress: () => {
+              setSelectedPoi(poi);
+              listRef.current?.scrollToOffset({ offset: 330, animated: true });
+            },
+          },
+        ],
+      );
+    }, 5000);
+  }, []);
+
+  // -----------------------------------------------------------------
+  // ยกเลิกการแจ้งเตือน
+  // -----------------------------------------------------------------
+  const handleCancelReminder = useCallback((poi: PointOfInterest) => {
+    if (reminderTimerRef.current) {
+      clearTimeout(reminderTimerRef.current);
+      reminderTimerRef.current = null;
+    }
+    setActiveReminderPoiId(null);
+    Alert.alert('✅ ยกเลิกการแจ้งเตือนแล้ว', `ยกเลิกการแจ้งเตือน "${poi.name}" เรียบร้อย`);
+  }, []);
 
   return (
     <FlatList
@@ -278,6 +367,32 @@ export function PoiExplorerScreen() {
                 </Text>
               </Pressable>
             </View>
+
+            {/* Notification Reminder Button */}
+            {activeReminderPoiId === selectedPoi.id ? (
+              <Pressable
+                accessibilityLabel="ยกเลิกการแจ้งเตือนสถานที่นี้"
+                accessibilityRole="button"
+                onPress={() => handleCancelReminder(selectedPoi)}
+                style={({ pressed }) => [styles.reminderCancelBtn, pressed && styles.pressed]}
+              >
+                <Text style={styles.reminderBtnIcon}>🔕</Text>
+                <Text style={styles.reminderCancelBtnText}>ยกเลิกการแจ้งเตือน</Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                accessibilityLabel="ตั้งการแจ้งเตือนทดสอบ 5 วินาที"
+                accessibilityRole="button"
+                onPress={() => handleScheduleReminder(selectedPoi)}
+                style={({ pressed }) => [
+                  styles.reminderBtn,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={styles.reminderBtnIcon}>🔔</Text>
+                <Text style={styles.reminderBtnText}>ทดสอบแจ้งเตือน (5 วิ)</Text>
+              </Pressable>
+            )}
           </View>
 
           {/* Landmark List Header */}
@@ -338,6 +453,9 @@ export function PoiExplorerScreen() {
             </View>
 
             <View style={[styles.cardSelectBtn, isSelected && styles.cardSelectBtnActive]}>
+              {activeReminderPoiId === item.id && (
+                <Text style={styles.cardReminderBadge}>🔔 </Text>
+              )}
               <Text style={[styles.cardSelectBtnText, isSelected && styles.cardSelectBtnTextActive]}>
                 {isSelected ? '✓ หมุดนี้' : 'ดูพิกัด'}
               </Text>
@@ -773,6 +891,50 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontVariant: ['tabular-nums'],
   },
+  reminderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    backgroundColor: colors.gold,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    marginTop: 8,
+    shadowColor: colors.goldDark,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.22,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  reminderBtnLoading: {
+    opacity: 0.6,
+  },
+  reminderCancelBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: colors.coral,
+    backgroundColor: 'rgba(224,90,56,0.06)',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    marginTop: 8,
+  },
+  reminderBtnIcon: {
+    fontSize: 15,
+    marginRight: 6,
+  },
+  reminderBtnText: {
+    color: colors.navy,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  reminderCancelBtnText: {
+    color: colors.coral,
+    fontSize: 12,
+    fontWeight: '900',
+  },
   listHeaderRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -900,6 +1062,9 @@ const styles = StyleSheet.create({
   },
   cardSelectBtnTextActive: {
     color: colors.navy,
+  },
+  cardReminderBadge: {
+    fontSize: 10,
   },
   emptyWrap: {
     alignItems: 'center',
