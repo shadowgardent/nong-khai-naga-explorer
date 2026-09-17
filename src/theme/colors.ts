@@ -3,6 +3,7 @@ export const colors = {
   surface: '#FFFFFF',
   surfaceWarm: '#E2EFEA',
   surfaceMuted: '#F4F9F7',
+  surfaceDark: '#0B332B',
   primary: '#0D6E54',
   primaryDark: '#084B39',
   emerald: '#0D6E54',
