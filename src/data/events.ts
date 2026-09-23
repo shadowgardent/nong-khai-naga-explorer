@@ -16,81 +16,87 @@ export function formatEventTimeDisplay(isoString: string): string {
   return `เวลา ${hours}:${minutes} น.`;
 }
 
-export const initialEvents: NongKhaiEvent[] = [
-  {
-    id: 'event-naga-fireball',
-    title: 'งานประเพณีออกพรรษาและบั้งไฟพญานาคโลก',
-    location: {
-      name: 'ลานวัฒนธรรมพญานาคคู่ ริมฝั่งโขง',
-      address: 'หน้าวัดลำดวน ถนนริมโขง อำเภอเมืองหนองคาย',
-      poiId: 'twin-naga-yard',
-      latitude: 17.8858,
-      longitude: 102.7441,
+/**
+ * สร้างข้อมูลกิจกรรมใหม่ทุกครั้งที่เรียกใช้
+ * เพื่อให้เวลาเริ่มต้นเป็นปัจจุบันเสมอ ไม่เป็น Stale Data
+ */
+export function createInitialEvents(): NongKhaiEvent[] {
+  return [
+    {
+      id: 'event-naga-fireball',
+      title: 'งานประเพณีออกพรรษาและบั้งไฟพญานาคโลก',
+      location: {
+        name: 'ลานวัฒนธรรมพญานาคคู่ ริมฝั่งโขง',
+        address: 'หน้าวัดลำดวน ถนนริมโขง อำเภอเมืองหนองคาย',
+        poiId: 'twin-naga-yard',
+        latitude: 17.8858,
+        longitude: 102.7441,
+      },
+      startsAt: getRelativeEventDate(45),
+      displayTime: 'เริ่มในอีก 45 นาที',
+      description:
+        'ปรากฏการณ์บั้งไฟพญานาคอันลึกลับเหนือลำน้ำโขง พร้อมพิธีบวงสรวงสักการะองค์พญานาคราชและการไหลเรือไฟตระการตาสองฝั่งไทย-ลาว',
+      icon: '🐉',
+      category: 'festival',
+      categoryLabel: 'เทศกาลประเพณี',
+      highlight: 'ชมบั้งไฟพญานาคพวยพุ่งกลางแม่น้ำโขงและขบวนแห่เรือไฟ',
     },
-    startsAt: getRelativeEventDate(45), // เริ่มในอีก 45 นาที (เตือนก่อน 30 นาที = อีก 15 นาที)
-    displayTime: 'เริ่มในอีก 45 นาที',
-    description:
-      'ปรากฏการณ์บั้งไฟพญานาคอันลึกลับเหนือลำน้ำโขง พร้อมพิธีบวงสรวงสักการะองค์พญานาคราชและการไหลเรือไฟตระการตาสองฝั่งไทย-ลาว',
-    icon: '🐉',
-    category: 'festival',
-    categoryLabel: 'เทศกาลประเพณี',
-    highlight: 'ชมบั้งไฟพญานาคพวยพุ่งกลางแม่น้ำโขงและขบวนแห่เรือไฟ',
-  },
-  {
-    id: 'event-luang-pho-phra-sai',
-    title: 'พิธีสมโภชและสรงน้ำหลวงพ่อพระใส',
-    location: {
-      name: 'วัดโพธิ์ชัย (พระอารามหลวง)',
-      address: 'ถนนโพธิ์ชัย ตำบลในเมือง อำเภอเมืองหนองคาย',
-      poiId: 'wat-pho-chai',
-      latitude: 17.8837,
-      longitude: 102.7562,
+    {
+      id: 'event-luang-pho-phra-sai',
+      title: 'พิธีสมโภชและสรงน้ำหลวงพ่อพระใส',
+      location: {
+        name: 'วัดโพธิ์ชัย (พระอารามหลวง)',
+        address: 'ถนนโพธิ์ชัย ตำบลในเมือง อำเภอเมืองหนองคาย',
+        poiId: 'wat-pho-chai',
+        latitude: 17.8837,
+        longitude: 102.7562,
+      },
+      startsAt: getRelativeEventDate(60),
+      displayTime: 'เริ่มในอีก 1 ชั่วโมง',
+      description:
+        'งานบุญใหญ่ประจำปี อัญเชิญหลวงพ่อพระใส พระพุทธรูปคู่บ้านคู่เมืองลงจากพระอุโบสถ เพื่อให้พุทธศาสนิกชนสรงน้ำขอพรเพื่อความเป็นสิริมงคล',
+      icon: '🛕',
+      category: 'cultural',
+      categoryLabel: 'พิธีกรรม & วัฒนธรรม',
+      highlight: 'ขบวนแห่อัญเชิญหลวงพ่อพระใสรอบพระอารามหลวง',
     },
-    startsAt: getRelativeEventDate(60), // เริ่มในอีก 60 นาที
-    displayTime: 'เริ่มในอีก 1 ชั่วโมง',
-    description:
-      'งานบุญใหญ่ประจำปี อัญเชิญหลวงพ่อพระใส พระพุทธรูปคู่บ้านคู่เมืองลงจากพระอุโบสถ เพื่อให้พุทธศาสนิกชนสรงน้ำขอพรเพื่อความเป็นสิริมงคล',
-    icon: '🛕',
-    category: 'cultural',
-    categoryLabel: 'พิธีกรรม & วัฒนธรรม',
-    highlight: 'ขบวนแห่อัญเชิญหลวงพ่อพระใสรอบพระอารามหลวง',
-  },
-  {
-    id: 'event-tha-sadet-night',
-    title: 'ถนนคนเดินริมโขง & เทศกาลอาหารอินโดจีน',
-    location: {
-      name: 'ตลาดท่าเสด็จ (ตลาดอินโดจีน)',
-      address: 'ถนนริมโขง ตำบลในเมือง อำเภอเมืองหนองคาย',
-      poiId: 'tha-sadet-market',
-      latitude: 17.8860,
-      longitude: 102.7482,
+    {
+      id: 'event-tha-sadet-night',
+      title: 'ถนนคนเดินริมโขง & เทศกาลอาหารอินโดจีน',
+      location: {
+        name: 'ตลาดท่าเสด็จ (ตลาดอินโดจีน)',
+        address: 'ถนนริมโขง ตำบลในเมือง อำเภอเมืองหนองคาย',
+        poiId: 'tha-sadet-market',
+        latitude: 17.8860,
+        longitude: 102.7482,
+      },
+      startsAt: getRelativeEventDate(90),
+      displayTime: 'เริ่มในอีก 1.5 ชั่วโมง',
+      description:
+        'สัมผัสบรรยากาศยามเย็นริมแม่น้ำโขง ชิมอาหารพื้นเมืองอีสาน-เวียดนาม ช้อปปิ้งของฝากหัตถกรรมพื้นบ้าน และฟังดนตรีสดริมฝั่งโขง',
+      icon: '🛍️',
+      category: 'cultural',
+      categoryLabel: 'ไลฟ์สไตล์ริมโขง',
+      highlight: 'ลิ้มลองแหนมเนืองต้นตำรับ ข้าวจี่ร้อนๆ และชมวิวสะพานมิตรภาพ',
     },
-    startsAt: getRelativeEventDate(90), // เริ่มในอีก 90 นาที
-    displayTime: 'เริ่มในอีก 1.5 ชั่วโมง',
-    description:
-      'สัมผัสบรรยากาศยามเย็นริมแม่น้ำโขง ชิมอาหารพื้นเมืองอีสาน-เวียดนาม ช้อปปิ้งของฝากหัตถกรรมพื้นบ้าน และฟังดนตรีสดริมฝั่งโขง',
-    icon: '🛍️',
-    category: 'cultural',
-    categoryLabel: 'ไลฟ์สไตล์ริมโขง',
-    highlight: 'ลิ้มลองแหนมเนืองต้นตำรับ ข้าวจี่ร้อนๆ และชมวิวสะพานมิตรภาพ',
-  },
-  {
-    id: 'event-skywalk-mist',
-    title: 'ชมทะเลหมอกและตะวันขึ้น สกายวอล์กวัดผาตากเสื้อ',
-    location: {
-      name: 'วัดผาตากเสื้อ (สกายวอล์กกระจกใส)',
-      address: 'ตำบลผาตั้ง อำเภอสังคม จังหวัดหนองคาย',
-      poiId: 'skywalk-pha-tak-suea',
-      latitude: 18.0387,
-      longitude: 102.3045,
+    {
+      id: 'event-skywalk-mist',
+      title: 'ชมทะเลหมอกและตะวันขึ้น สกายวอล์กวัดผาตากเสื้อ',
+      location: {
+        name: 'วัดผาตากเสื้อ (สกายวอล์กกระจกใส)',
+        address: 'ตำบลผาตั้ง อำเภอสังคม จังหวัดหนองคาย',
+        poiId: 'skywalk-pha-tak-suea',
+        latitude: 18.0387,
+        longitude: 102.3045,
+      },
+      startsAt: getRelativeEventDate(120),
+      displayTime: 'เริ่มในอีก 2 ชั่วโมง',
+      description:
+        'กิจกรรมชมทะเลหมอกยามเช้าเหนือแม่น้ำโขงบนสกายวอล์กกระจกใสรูปเกือกม้าแห่งแรกของประเทศไทย มองเห็นผืนป่าและประเทศลาวแบบพาโนรามา',
+      icon: '🌄',
+      category: 'eco',
+      categoryLabel: 'ธรรมชาติ & ชมวิว',
+      highlight: 'จุดชมวิวแม่น้ำโขงและสายหมอกที่สวยที่สุดในจังหวัดหนองคาย',
     },
-    startsAt: getRelativeEventDate(120), // เริ่มในอีก 2 ชั่วโมง
-    displayTime: 'เริ่มในอีก 2 ชั่วโมง',
-    description:
-      'กิจกรรมชมทะเลหมอกยามเช้าเหนือแม่น้ำโขงบนสกายวอล์กกระจกใสรูปเกือกม้าแห่งแรกของประเทศไทย มองเห็นผืนป่าและประเทศลาวแบบพาโนรามา',
-    icon: '🌄',
-    category: 'eco',
-    categoryLabel: 'ธรรมชาติ & ชมวิว',
-    highlight: 'จุดชมวิวแม่น้ำโขงและสายหมอกที่สวยที่สุดในจังหวัดหนองคาย',
-  },
-];
+  ];
+}

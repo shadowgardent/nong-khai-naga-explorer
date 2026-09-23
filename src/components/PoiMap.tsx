@@ -116,8 +116,9 @@ export function PoiMap({ poi }: PoiMapProps) {
   const [isFullMapVisible, setFullMapVisible] = useState(false);
 
   // HTML เริ่มต้นสร้างเพียงครั้งแรก จากนั้นสั่ง animate ด้วย JavaScript injection
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const initialHtml = useMemo(() => createLeafletHtml(poi, 15), []);
-  const fullHtml = useMemo(() => createLeafletHtml(poi, 15), [isFullMapVisible]);
+  const fullHtml = useMemo(() => createLeafletHtml(poi, 15), [poi.id]);
 
   useEffect(() => {
     const script = `

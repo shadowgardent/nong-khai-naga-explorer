@@ -10,7 +10,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { initialEvents } from '../data/events';
+import { createInitialEvents } from '../data/events';
 import { colors } from '../theme/colors';
 import {
   ensureNotificationPermission,
@@ -44,7 +44,7 @@ export function Lab11TestModal({
 
   if (!visible) return null;
 
-  const testEvent = initialEvents[0];
+  const testEvent = createInitialEvents()[0];
 
   // 1. ทดสอบ Foreground
   const handleTestForeground = async () => {

@@ -11,7 +11,7 @@ import {
   View,
 } from 'react-native';
 import { pointsOfInterest } from '../data/pointsOfInterest';
-import { initialTrips } from '../data/initialTrips';
+import { createInitialTrips } from '../data/initialTrips';
 import { takePhotoWithCamera, pickPhotoFromGallery } from '../services/cameraService';
 import { scheduleTripReminder, cancelTripReminder } from '../services/notificationService';
 import { colors } from '../theme/colors';
@@ -32,7 +32,7 @@ const TIME_OPTIONS = [
 ];
 
 export function TripPlannerTab({ onSelectPoi, onOpenTestPanel }: TripPlannerTabProps) {
-  const [trips, setTrips] = useState<TripItem[]>(initialTrips);
+  const [trips, setTrips] = useState<TripItem[]>(() => createInitialTrips());
   const [selectedPoi, setSelectedPoi] = useState<PointOfInterest>(pointsOfInterest[0]);
   const [poiModalVisible, setPoiModalVisible] = useState(false);
   const [selectedMinutes, setSelectedMinutes] = useState<number>(1);

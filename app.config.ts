@@ -1,8 +1,6 @@
 import type { ConfigContext, ExpoConfig } from 'expo/config';
 
 export default ({ config }: ConfigContext): ExpoConfig => {
-  const androidMapsApiKey = process.env.GOOGLE_MAPS_ANDROID_API_KEY;
-
   return {
     ...config,
     name: 'Nong Khai Naga Explorer',
@@ -23,16 +21,6 @@ export default ({ config }: ConfigContext): ExpoConfig => {
           backgroundColor: '#0B332B',
         },
       ],
-      ...(androidMapsApiKey
-        ? [
-            [
-              'react-native-maps',
-              {
-                androidGoogleMapsApiKey: androidMapsApiKey,
-              },
-            ] as [string, any],
-          ]
-        : []),
     ],
     ios: {
       icon: './assets/nong-khai-naga-icon.png',
@@ -46,15 +34,6 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         foregroundImage: './assets/nong-khai-naga-icon.png',
         backgroundColor: '#0B332B',
       },
-      ...(androidMapsApiKey
-        ? {
-            config: {
-              googleMaps: {
-                apiKey: androidMapsApiKey,
-              },
-            },
-          }
-        : {}),
     },
     web: {
       favicon: './assets/nong-khai-naga-icon.png',

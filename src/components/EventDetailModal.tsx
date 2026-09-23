@@ -8,7 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { initialEvents } from '../data/events';
+import { createInitialEvents } from '../data/events';
 import { colors } from '../theme/colors';
 import {
   cancelEventReminder,
@@ -34,7 +34,7 @@ export function EventDetailModal({
   if (!visible || !eventId) return null;
 
   // ตรวจสอบและค้นหา Event ตาม ID (DoD: Deep link validate eventId)
-  const event = initialEvents.find((e) => e.id === eventId);
+  const event = createInitialEvents().find((e) => e.id === eventId);
   const isReminderSet = event ? hasActiveReminder(event.id) : false;
 
   // -------------------------------------------------------------

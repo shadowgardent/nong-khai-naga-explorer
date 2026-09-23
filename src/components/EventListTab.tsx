@@ -8,7 +8,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { initialEvents } from '../data/events';
+import { createInitialEvents } from '../data/events';
 import { colors } from '../theme/colors';
 import type { NongKhaiEvent } from '../types/event';
 import {
@@ -30,7 +30,7 @@ export function EventListTab({
   onOpenTestPanel,
   onSelectPoi,
 }: EventListTabProps) {
-  const [events, setEvents] = useState<NongKhaiEvent[]>(initialEvents);
+  const [events, setEvents] = useState<NongKhaiEvent[]>(() => createInitialEvents());
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
 
