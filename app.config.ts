@@ -13,6 +13,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     userInterfaceStyle: 'light',
     plugins: [
       'expo-status-bar',
+      'expo-camera',
+      'expo-image-picker',
       [
         'expo-splash-screen',
         {

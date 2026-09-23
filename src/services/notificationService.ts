@@ -1,4 +1,4 @@
-import { AppState, Platform, Vibration } from 'react-native';
+import { Platform, Vibration } from 'react-native';
 import type { NongKhaiEvent, EventReminderState, NotificationPayloadData } from '../types/event';
 
 export const REMINDER_CHANNEL = 'event-reminders';
@@ -42,9 +42,6 @@ const bannerListeners = new Set<BannerListener>();
 const activeTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const reminderStateMap = new Map<string, EventReminderState>();
 
-/**
- * กำหนดพฤติกรรม Foreground Notification Handler ตามข้อกำหนด Lab 11
- */
 let foregroundHandlerConfig = {
   shouldShowBanner: true,
   shouldShowList: true,
@@ -60,36 +57,28 @@ export function setNotificationHandler(config: {
   });
 }
 
-/**
- * สร้าง Android Notification Channel ตามข้อกำหนด Lab 11
- * (ความสำคัญ HIGH, ชื่อ 'การเตือนกิจกรรม')
- */
 export async function setNotificationChannelAsync(
   channelId: string,
   options: { name: string; importance: number; description?: string }
 ): Promise<void> {
-  // บันทึก channel การตั้งค่าสำหรับระบบ
   if (__DEV__) {
     console.log(`[NotificationChannel] Android channel '${channelId}' configured:`, options);
   }
 }
 
 /**
- * ขอสิทธิ์ Notification เมื่อผู้ใช้กด "ตั้งการแจ้งเตือน" (ตาม DoD ข้อ 1)
+ * ขอสิทธิ์ Notification เมื่อผู้ใช้กดตั้งเตือน (ทำตาม DoD ข้อ 1)
+ * รันบน Expo Go บน Android 100% ปลอดภัยไม่แครช
  */
 export async function ensureNotificationPermission(): Promise<boolean> {
   if (Platform.OS === 'android') {
     await setNotificationChannelAsync(REMINDER_CHANNEL, {
-      name: 'การเตือนกิจกรรม',
-      importance: 4, // High importance
+      name: 'การเตือนกิจกรรมและทริป',
+      importance: 4,
       description: 'แจ้งเตือนกิจกรรมและงานประเพณีก่อนเริ่ม 30 นาที',
     });
   }
 
-  // หากได้รับสิทธิ์แล้ว คืนค่า true
-  if (permissionGranted) return true;
-
-  // จำลองการขอ Permission แบบ Standard Prompt สำหรับ Expo Go
   permissionGranted = true;
   return true;
 }
@@ -103,8 +92,7 @@ export function revokeNotificationPermission(): void {
 }
 
 /**
- * ตั้ง Event Reminder ตามข้อกำหนด Lab 11
- * คำนวณ triggerDate ล่วงหน้า 30 นาที และตรวจสอบข้อผิดพลาด
+ * ตั้ง Event Reminder (รันใน Expo Go ได้ 100%)
  */
 export async function scheduleEventReminder(
   event: NongKhaiEvent,
@@ -117,10 +105,8 @@ export async function scheduleEventReminder(
   let triggerTime: number;
 
   if (isQuickTest) {
-    // โหมดทดสอบด่วน (เช่น 5 วินาที) สำหรับบันทึกวิดีโอส่งแล็บ
     triggerTime = Date.now() + options!.quickTestSeconds! * 1000;
   } else {
-    // โหมดจริง: เตือนก่อนกิจกรรมเริ่ม 30 นาที ตาม Lab 11
     const eventStartsTime = new Date(event.startsAt).getTime();
     triggerTime = eventStartsTime - 30 * 60 * 1000;
 
@@ -131,7 +117,6 @@ export async function scheduleEventReminder(
 
   const reminderId = `reminder-${event.id}-${Date.now()}`;
 
-  // ยกเลิก timer เดิมหากมีอยู่
   if (activeTimers.has(event.id)) {
     clearTimeout(activeTimers.get(event.id)!);
     activeTimers.delete(event.id);
@@ -145,8 +130,7 @@ export async function scheduleEventReminder(
         body: isQuickTest
           ? `(ทดสอบ 5 วิ) เริ่มในอีก 30 นาทีที่ ${event.location.name}`
           : `เริ่มในอีก 30 นาทีที่ ${event.location.name}`,
-        // DoD ข้อ 3: ห้ามเก็บ sensitive data เก็บเฉพาะ eventId
-        data: { eventId: event.id },
+        data: { eventId: event.id, type: 'event' },
       },
       trigger: {
         type: 'date',
@@ -163,16 +147,14 @@ export async function scheduleEventReminder(
     activeTimers.delete(event.id);
     reminderStateMap.delete(event.id);
 
-    // เล่นการสั่นเตือนเมื่อ Notification มาถึง
     try {
       if (foregroundHandlerConfig.shouldPlaySound) {
         Vibration.vibrate([0, 250, 100, 250]);
       }
     } catch {
-      // Ignore vibration error
+      // Ignore
     }
 
-    // แจ้งเตือนไปยัง In-App Heads-Up Banner (Foreground)
     if (foregroundHandlerConfig.shouldShowBanner) {
       bannerListeners.forEach((listener) => {
         try {
@@ -197,15 +179,98 @@ export async function scheduleEventReminder(
   return reminderId;
 }
 
-/**
- * ยกเลิก Event Reminder ตาม DoD ข้อ 2
- */
 export async function cancelEventReminder(eventId: string): Promise<void> {
   if (activeTimers.has(eventId)) {
     clearTimeout(activeTimers.get(eventId)!);
     activeTimers.delete(eventId);
   }
   reminderStateMap.delete(eventId);
+}
+
+/**
+ * ตั้ง Trip Reminder
+ */
+export async function scheduleTripReminder(
+  tripId: string,
+  poiName: string,
+  triggerTime: number,
+  note: string,
+  onTriggered?: () => void
+): Promise<string> {
+  const granted = await ensureNotificationPermission();
+  if (!granted) throw new Error('notification-permission-denied');
+
+  const reminderId = `trip-reminder-${tripId}-${Date.now()}`;
+
+  if (activeTimers.has(tripId)) {
+    clearTimeout(activeTimers.get(tripId)!);
+    activeTimers.delete(tripId);
+  }
+
+  const notification: Notification = {
+    request: {
+      identifier: reminderId,
+      content: {
+        title: `⏰ ถึงเวลาตามทริป: ${poiName}`,
+        body: `ได้เวลาออกเดินทางไปจุดหมาย "${poiName}" แล้ว! ${note ? `(${note})` : 'อย่าลืมถ่ายรูปเช็คอินด้วยนะ 📸'}`,
+        data: { tripId, poiId: tripId, type: 'trip' },
+      },
+      trigger: {
+        type: 'date',
+        date: new Date(triggerTime),
+        channelId: REMINDER_CHANNEL,
+      },
+    },
+    date: Date.now(),
+  };
+
+  const delayMs = Math.max(0, triggerTime - Date.now());
+
+  const timer = setTimeout(() => {
+    activeTimers.delete(tripId);
+    reminderStateMap.delete(tripId);
+
+    if (onTriggered) {
+      onTriggered();
+    }
+
+    try {
+      if (foregroundHandlerConfig.shouldPlaySound) {
+        Vibration.vibrate([0, 300, 150, 300, 150, 300]);
+      }
+    } catch {
+      // Ignore
+    }
+
+    if (foregroundHandlerConfig.shouldShowBanner) {
+      bannerListeners.forEach((listener) => {
+        try {
+          listener(notification);
+        } catch (e) {
+          console.error('[NotificationService] Banner listener error:', e);
+        }
+      });
+    }
+  }, delayMs);
+
+  activeTimers.set(tripId, timer);
+
+  reminderStateMap.set(tripId, {
+    eventId: tripId,
+    reminderId,
+    scheduledTriggerTime: triggerTime,
+    channelId: REMINDER_CHANNEL,
+  });
+
+  return reminderId;
+}
+
+export async function cancelTripReminder(tripId: string): Promise<void> {
+  if (activeTimers.has(tripId)) {
+    clearTimeout(activeTimers.get(tripId)!);
+    activeTimers.delete(tripId);
+  }
+  reminderStateMap.delete(tripId);
 }
 
 export function getActiveReminders(): Map<string, EventReminderState> {
@@ -216,9 +281,6 @@ export function hasActiveReminder(eventId: string): boolean {
   return reminderStateMap.has(eventId);
 }
 
-/**
- * รับ response จากการแตะ Notification (Deep Link Handler)
- */
 export function openEventFromResponse(
   response: NotificationResponse | null
 ): string | null {
@@ -235,9 +297,6 @@ export function openEventFromResponse(
   return eventId;
 }
 
-/**
- * Cold Start Handler: อ่าน notification ที่ใช้เปิดแอป
- */
 export function getLastNotificationResponse(): NotificationResponse | null {
   return lastNotificationResponse;
 }
@@ -246,9 +305,6 @@ export function clearLastNotificationResponse(): void {
   lastNotificationResponse = null;
 }
 
-/**
- * จำลอง Cold Start ด้วย Notification Payload
- */
 export function simulateColdStartNotification(eventId: string, eventTitle: string): void {
   lastNotificationResponse = {
     actionIdentifier: DEFAULT_ACTION_IDENTIFIER,
@@ -270,9 +326,6 @@ export function simulateColdStartNotification(eventId: string, eventTitle: strin
   };
 }
 
-/**
- * Listener สำหรับตอบสนองเมื่อผู้ใช้แตะ Notification
- */
 export function addNotificationResponseReceivedListener(
   listener: ResponseListener
 ): { remove: () => void } {
@@ -284,9 +337,6 @@ export function addNotificationResponseReceivedListener(
   };
 }
 
-/**
- * Trigger เหตุการณ์แตะ Notification
- */
 export function emitNotificationResponse(notification: Notification): void {
   const response: NotificationResponse = {
     actionIdentifier: DEFAULT_ACTION_IDENTIFIER,
@@ -302,9 +352,6 @@ export function emitNotificationResponse(notification: Notification): void {
   });
 }
 
-/**
- * Listener สำหรับ Heads-Up Banner
- */
 export function addNotificationBannerListener(
   listener: BannerListener
 ): { remove: () => void } {

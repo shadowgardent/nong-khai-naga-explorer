@@ -11,6 +11,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 
 import { PoiExplorerScreen } from './src/screens/PoiExplorerScreen';
+import { TripPlannerTab } from './src/components/TripPlannerTab';
 import { EventListTab } from './src/components/EventListTab';
 import { EventDetailModal } from './src/components/EventDetailModal';
 import { Lab11TestModal } from './src/components/Lab11TestModal';
@@ -24,10 +25,10 @@ import {
   setNotificationHandler,
 } from './src/services/notificationService';
 
-type MainTab = 'landmarks' | 'events';
+type MainTab = 'landmarks' | 'planner' | 'events';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<MainTab>('landmarks');
+  const [activeTab, setActiveTab] = useState<MainTab>('planner'); // ตั้งทริปเป็นหน้าแรกให้เห็นระบบจัดทริปใหม่ได้ทันที
   const [targetPoiId, setTargetPoiId] = useState<string | null>(null);
 
   // Lab 11 Event Routing State (/events/[id])
@@ -36,11 +37,9 @@ export default function App() {
   const [testModalVisible, setTestModalVisible] = useState(false);
 
   // -------------------------------------------------------------
-  // Observer ใน Root Layout ตามข้อกำหนด Lab 11
-  // รองรับ Cold Start, Foreground, และ Background อย่างสมบูรณ์
+  // Observer ใน Root Layout ตามข้อกำหนด Lab 11 & Trip Notifications
   // -------------------------------------------------------------
   useEffect(() => {
-    // 1. กำหนดพฤติกรรม Foreground Notification Handler ตาม Lab 11
     setNotificationHandler({
       handleNotification: async () => ({
         shouldShowBanner: true,
@@ -50,23 +49,33 @@ export default function App() {
       }),
     });
 
-    // 2. รองรับ Cold Start: อ่าน notification ที่ใช้เปิดแอป
     const initialResponse = getLastNotificationResponse();
     if (initialResponse) {
-      const eventId = openEventFromResponse(initialResponse);
-      if (eventId) {
-        setTargetEventId(eventId);
-        setEventModalVisible(true);
+      const data = initialResponse.notification.request.content.data;
+      if (data?.type === 'trip' && data.poiId) {
+        setTargetPoiId(data.poiId);
+        setActiveTab('landmarks');
+      } else {
+        const eventId = openEventFromResponse(initialResponse);
+        if (eventId) {
+          setTargetEventId(eventId);
+          setEventModalVisible(true);
+        }
       }
       clearLastNotificationResponse();
     }
 
-    // 3. รองรับตอนแอปกำลังทำงาน (Foreground) หรือกลับจาก Background
     const subscription = addNotificationResponseReceivedListener((response) => {
-      const eventId = openEventFromResponse(response);
-      if (eventId) {
-        setTargetEventId(eventId);
-        setEventModalVisible(true);
+      const data = response.notification.request.content.data;
+      if (data?.type === 'trip' && data.poiId) {
+        setTargetPoiId(data.poiId);
+        setActiveTab('landmarks');
+      } else {
+        const eventId = openEventFromResponse(response);
+        if (eventId) {
+          setTargetEventId(eventId);
+          setEventModalVisible(true);
+        }
       }
     });
 
@@ -83,7 +92,7 @@ export default function App() {
     setTargetEventId(null);
   }, []);
 
-  const handleSelectPoiFromEvent = useCallback((poiId: string) => {
+  const handleSelectPoiFromEventOrTrip = useCallback((poiId: string) => {
     setTargetPoiId(poiId);
     setActiveTab('landmarks');
   }, []);
@@ -118,11 +127,16 @@ export default function App() {
               notificationPoiId={targetPoiId}
               onHandledNotification={() => setTargetPoiId(null)}
             />
+          ) : activeTab === 'planner' ? (
+            <TripPlannerTab
+              onOpenTestPanel={() => setTestModalVisible(true)}
+              onSelectPoi={handleSelectPoiFromEventOrTrip}
+            />
           ) : (
             <EventListTab
               onOpenEventDetail={handleOpenEventDetail}
               onOpenTestPanel={() => setTestModalVisible(true)}
-              onSelectPoi={handleSelectPoiFromEvent}
+              onSelectPoi={handleSelectPoiFromEventOrTrip}
             />
           )}
         </View>
@@ -142,6 +156,18 @@ export default function App() {
           </Pressable>
 
           <Pressable
+            accessibilityLabel="หน้าจัดทริปและถ่ายรูป"
+            accessibilityRole="tab"
+            onPress={() => setActiveTab('planner')}
+            style={[styles.navItem, activeTab === 'planner' && styles.navItemActive]}
+          >
+            <Text style={styles.navIcon}>🧭</Text>
+            <Text style={[styles.navText, activeTab === 'planner' && styles.navTextActive]}>
+              จัดทริป & กล้อง
+            </Text>
+          </Pressable>
+
+          <Pressable
             accessibilityLabel="หน้ากิจกรรมและแจ้งเตือน Lab 11"
             accessibilityRole="tab"
             onPress={() => setActiveTab('events')}
@@ -154,7 +180,7 @@ export default function App() {
               </View>
             </View>
             <Text style={[styles.navText, activeTab === 'events' && styles.navTextActive]}>
-              กิจกรรม & Lab 11
+              กิจกรรม
             </Text>
           </Pressable>
 
@@ -165,7 +191,7 @@ export default function App() {
             style={styles.navItemTest}
           >
             <Text style={styles.navIcon}>🧪</Text>
-            <Text style={styles.navTextTest}>ตรวจผลแล็บ</Text>
+            <Text style={styles.navTextTest}>ตรวจแล็บ</Text>
           </Pressable>
         </View>
       </KeyboardAvoidingView>
@@ -174,7 +200,7 @@ export default function App() {
       <EventDetailModal
         eventId={targetEventId}
         onClose={handleCloseEventDetail}
-        onSelectPoi={handleSelectPoiFromEvent}
+        onSelectPoi={handleSelectPoiFromEventOrTrip}
         visible={eventModalVisible}
       />
 
@@ -207,27 +233,28 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#E2E8F0',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === 'ios' ? 48 : 46, // เพิ่มระยะห่างด้านล่างสำหรับ Android เป็น 46px ตามที่ต้องการ
+    paddingHorizontal: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-    elevation: 6,
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 10,
   },
   navItem: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: 4,
+    paddingVertical: 6,
     borderRadius: 12,
   },
   navItemActive: {
-    backgroundColor: 'rgba(11, 79, 63, 0.08)',
+    backgroundColor: 'rgba(13, 110, 84, 0.1)',
   },
   navItemTest: {
-    flex: 0.9,
+    flex: 0.85,
     alignItems: 'center',
-    paddingVertical: 4,
+    paddingVertical: 6,
     borderRadius: 12,
     backgroundColor: 'rgba(232, 169, 56, 0.12)',
     borderWidth: 1,
@@ -238,7 +265,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   navText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     color: '#64748B',
   },
@@ -247,7 +274,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   navTextTest: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
     color: colors.goldDark,
   },

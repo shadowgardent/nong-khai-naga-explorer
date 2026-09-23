@@ -26,7 +26,10 @@ export type EventReminderState = {
 };
 
 export type NotificationPayloadData = {
-  eventId: string;
+  eventId?: string;
+  tripId?: string;
+  poiId?: string;
+  type?: 'event' | 'trip';
   // ห้ามเก็บ sensitive data หรือ entire event object ตาม DoD ข้อ 3
 };
 
