@@ -1,12 +1,25 @@
 import { Platform, Vibration } from 'react-native';
-import * as Notifications from 'expo-notifications';
+// เราเจาะจง import เฉพาะฟังก์ชัน Local Notifications แยกตามไฟล์
+// เพื่อ "BYPASS" การ import 'expo-notifications' ตัวเต็ม (ซึ่งจะไป trigger Push Token Auto Registration ที่พังบน Expo Go Android)
+import { scheduleNotificationAsync } from 'expo-notifications/build/scheduleNotificationAsync';
+import { cancelScheduledNotificationAsync } from 'expo-notifications/build/cancelScheduledNotificationAsync';
+import { setNotificationHandler as nativeSetNotificationHandler } from 'expo-notifications/build/NotificationsHandler';
+import {
+  addNotificationResponseReceivedListener as nativeAddResponseListener,
+  addNotificationReceivedListener as nativeAddReceivedListener,
+  DEFAULT_ACTION_IDENTIFIER as NATIVE_DEFAULT_ACTION_IDENTIFIER,
+} from 'expo-notifications/build/NotificationsEmitter';
+import { setNotificationChannelAsync as nativeSetChannelAsync } from 'expo-notifications/build/setNotificationChannelAsync';
+import {
+  getPermissionsAsync,
+  requestPermissionsAsync,
+} from 'expo-notifications/build/NotificationPermissions';
+import { AndroidImportance } from 'expo-notifications/build/NotificationChannelManager.types';
+import { SchedulableTriggerInputTypes } from 'expo-notifications/build/Notifications.types';
+
 import type { NongKhaiEvent, EventReminderState, NotificationPayloadData } from '../types/event';
 
 export const REMINDER_CHANNEL = 'event-reminders';
-
-// ============================================================
-// Notification types (re-export จาก expo-notifications)
-// ============================================================
 
 export type NotificationContent = {
   title: string;
@@ -34,11 +47,7 @@ export type NotificationResponse = {
   notification: Notification;
 };
 
-export const DEFAULT_ACTION_IDENTIFIER = Notifications.DEFAULT_ACTION_IDENTIFIER;
-
-// ============================================================
-// Internal state
-// ============================================================
+export const DEFAULT_ACTION_IDENTIFIER = NATIVE_DEFAULT_ACTION_IDENTIFIER;
 
 type ResponseListener = (response: NotificationResponse) => void;
 type BannerListener = (notification: Notification) => void;
@@ -47,13 +56,12 @@ let permissionGranted = false;
 let lastNotificationResponse: NotificationResponse | null = null;
 const responseListeners = new Set<ResponseListener>();
 const bannerListeners = new Set<BannerListener>();
-const scheduledIds = new Map<string, string>(); // eventId -> notification identifier
+const scheduledIds = new Map<string, string>();
 const reminderStateMap = new Map<string, EventReminderState>();
 
 // ============================================================
-// ตั้งค่า Foreground Handler — ให้แสดง notification ขณะแอปเปิดอยู่
+// ตั้งค่า Foreground Behavior
 // ============================================================
-
 export function setNotificationHandler(config: {
   handleNotification: () => Promise<{
     shouldShowBanner: boolean;
@@ -62,62 +70,74 @@ export function setNotificationHandler(config: {
     shouldSetBadge: boolean;
   }>;
 }) {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => {
-      const res = await config.handleNotification();
-      return {
-        shouldShowAlert: true,   // แสดง popup notification ขณะ foreground
-        shouldPlaySound: res.shouldPlaySound,
-        shouldSetBadge: res.shouldSetBadge,
-        shouldShowBanner: res.shouldShowBanner,
-        shouldShowList: res.shouldShowList,
-      };
-    },
-  });
+  try {
+    nativeSetNotificationHandler({
+      handleNotification: async () => {
+        const res = await config.handleNotification();
+        return {
+          shouldShowAlert: true,
+          shouldPlaySound: res.shouldPlaySound,
+          shouldSetBadge: res.shouldSetBadge,
+          shouldShowBanner: res.shouldShowBanner,
+          shouldShowList: res.shouldShowList,
+        };
+      },
+    });
+  } catch (err) {
+    console.warn('[NotificationService] setNotificationHandler error:', err);
+  }
 }
 
 // ============================================================
-// Android Notification Channel
+// Android Channel Setup
 // ============================================================
-
 export async function setNotificationChannelAsync(
   channelId: string,
   options: { name: string; importance: number; description?: string }
 ): Promise<void> {
   if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync(channelId, {
-      name: options.name,
-      importance: options.importance as Notifications.AndroidImportance,
-      description: options.description,
-      sound: 'default',
-      vibrationPattern: [0, 250, 100, 250],
-      enableVibrate: true,
-    });
+    try {
+      await nativeSetChannelAsync(channelId, {
+        name: options.name,
+        importance: options.importance as AndroidImportance,
+        description: options.description,
+        sound: 'default',
+        vibrationPattern: [0, 250, 100, 250],
+        enableVibrate: true,
+      });
+    } catch (e) {
+      console.warn('[NotificationService] Error setting channel:', e);
+    }
   }
 }
 
 // ============================================================
-// Permission (Local Notifications — ไม่ใช้ Push Token)
+// Notification Permissions
 // ============================================================
-
 export async function ensureNotificationPermission(): Promise<boolean> {
   if (Platform.OS === 'android') {
     await setNotificationChannelAsync(REMINDER_CHANNEL, {
       name: 'การเตือนกิจกรรมและทริป',
-      importance: Notifications.AndroidImportance.HIGH,
+      importance: AndroidImportance.HIGH,
       description: 'แจ้งเตือนกิจกรรมและงานประเพณีก่อนเริ่ม 30 นาที',
     });
   }
 
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
+  try {
+    const { status: existingStatus } = await getPermissionsAsync();
+    let finalStatus = existingStatus;
 
-  if (existingStatus !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
+    if (existingStatus !== 'granted') {
+      const { status } = await requestPermissionsAsync();
+      finalStatus = status;
+    }
+
+    permissionGranted = finalStatus === 'granted';
+  } catch (e) {
+    console.warn('[NotificationService] Permission request fallback:', e);
+    permissionGranted = true;
   }
 
-  permissionGranted = finalStatus === 'granted';
   return permissionGranted;
 }
 
@@ -130,9 +150,8 @@ export function revokeNotificationPermission(): void {
 }
 
 // ============================================================
-// Schedule Event Reminder — ใช้ expo-notifications จริง
+// Schedule Event Reminder (Native Local Notification)
 // ============================================================
-
 export async function scheduleEventReminder(
   event: NongKhaiEvent,
   options?: { quickTestSeconds?: number }
@@ -156,32 +175,54 @@ export async function scheduleEventReminder(
     triggerSeconds = Math.max(1, Math.round((triggerTime - Date.now()) / 1000));
   }
 
-  // ยกเลิก notification เก่าของ event นี้ถ้ามี
   if (scheduledIds.has(event.id)) {
     try {
-      await Notifications.cancelScheduledNotificationAsync(scheduledIds.get(event.id)!);
+      await cancelScheduledNotificationAsync(scheduledIds.get(event.id)!);
     } catch {
-      // Ignore
+      // ignore
     }
     scheduledIds.delete(event.id);
   }
 
-  // ตั้ง notification ผ่าน expo-notifications — ทำงานได้ทั้ง foreground และ background
-  const identifier = await Notifications.scheduleNotificationAsync({
-    content: {
-      title: `🔔 ใกล้ถึงเวลา: ${event.title}`,
-      body: isQuickTest
-        ? `(ทดสอบ) เริ่มในอีก 30 นาทีที่ ${event.location.name}`
-        : `เริ่มในอีก 30 นาทีที่ ${event.location.name}`,
-      data: { eventId: event.id, type: 'event' } as NotificationPayloadData,
-      sound: 'default',
-      ...(Platform.OS === 'android' && { channelId: REMINDER_CHANNEL }),
-    },
-    trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-      seconds: triggerSeconds,
-    },
-  });
+  let identifier = `reminder-${event.id}-${Date.now()}`;
+  try {
+    identifier = await scheduleNotificationAsync({
+      content: {
+        title: `🔔 ใกล้ถึงเวลา: ${event.title}`,
+        body: isQuickTest
+          ? `(ทดสอบ) เริ่มในอีก 30 นาทีที่ ${event.location.name}`
+          : `เริ่มในอีก 30 นาทีที่ ${event.location.name}`,
+        data: { eventId: event.id, type: 'event' } as NotificationPayloadData,
+        sound: 'default',
+        ...(Platform.OS === 'android' && { channelId: REMINDER_CHANNEL }),
+      },
+      trigger: {
+        type: SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds: triggerSeconds,
+      },
+    });
+  } catch (scheduleError) {
+    console.warn('[NotificationService] Native schedule fallback to timer:', scheduleError);
+    // Fallback: หากบนเครื่องใดยังบล็อก native scheduler ให้รัน in-app timer เผื่อไว้
+    setTimeout(() => {
+      try {
+        Vibration.vibrate([0, 250, 100, 250]);
+      } catch {}
+      const fallbackNotif: Notification = {
+        request: {
+          identifier,
+          content: {
+            title: `🔔 ใกล้ถึงเวลา: ${event.title}`,
+            body: `เริ่มในอีก 30 นาทีที่ ${event.location.name}`,
+            data: { eventId: event.id, type: 'event' },
+          },
+          trigger: { type: 'timer', channelId: REMINDER_CHANNEL },
+        },
+        date: Date.now(),
+      };
+      bannerListeners.forEach((l) => l(fallbackNotif));
+    }, triggerSeconds * 1000);
+  }
 
   scheduledIds.set(event.id, identifier);
 
@@ -200,9 +241,9 @@ export async function scheduleEventReminder(
 export async function cancelEventReminder(eventId: string): Promise<void> {
   if (scheduledIds.has(eventId)) {
     try {
-      await Notifications.cancelScheduledNotificationAsync(scheduledIds.get(eventId)!);
+      await cancelScheduledNotificationAsync(scheduledIds.get(eventId)!);
     } catch {
-      // Ignore
+      // ignore
     }
     scheduledIds.delete(eventId);
   }
@@ -210,9 +251,8 @@ export async function cancelEventReminder(eventId: string): Promise<void> {
 }
 
 // ============================================================
-// Schedule Trip Reminder — ใช้ expo-notifications จริง
+// Schedule Trip Reminder
 // ============================================================
-
 export async function scheduleTripReminder(
   tripId: string,
   poiName: string,
@@ -223,33 +263,37 @@ export async function scheduleTripReminder(
   const granted = await ensureNotificationPermission();
   if (!granted) throw new Error('notification-permission-denied');
 
-  // ยกเลิก notification เก่าของ trip นี้ถ้ามี
   if (scheduledIds.has(tripId)) {
     try {
-      await Notifications.cancelScheduledNotificationAsync(scheduledIds.get(tripId)!);
+      await cancelScheduledNotificationAsync(scheduledIds.get(tripId)!);
     } catch {
-      // Ignore
+      // ignore
     }
     scheduledIds.delete(tripId);
   }
 
   const triggerSeconds = Math.max(1, Math.round((triggerTime - Date.now()) / 1000));
+  let identifier = `trip-${tripId}-${Date.now()}`;
 
-  const identifier = await Notifications.scheduleNotificationAsync({
-    content: {
-      title: `⏰ ถึงเวลาตามทริป: ${poiName}`,
-      body: note
-        ? `ได้เวลาออกเดินทางไปจุดหมาย "${poiName}" แล้ว! (${note})`
-        : `ได้เวลาออกเดินทางไปจุดหมาย "${poiName}" แล้ว! อย่าลืมถ่ายรูปเช็คอินด้วยนะ 📸`,
-      data: { tripId, poiId: tripId, type: 'trip' } as NotificationPayloadData,
-      sound: 'default',
-      ...(Platform.OS === 'android' && { channelId: REMINDER_CHANNEL }),
-    },
-    trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-      seconds: triggerSeconds,
-    },
-  });
+  try {
+    identifier = await scheduleNotificationAsync({
+      content: {
+        title: `⏰ ถึงเวลาตามทริป: ${poiName}`,
+        body: note
+          ? `ได้เวลาออกเดินทางไปจุดหมาย "${poiName}" แล้ว! (${note})`
+          : `ได้เวลาออกเดินทางไปจุดหมาย "${poiName}" แล้ว! อย่าลืมถ่ายรูปเช็คอินด้วยนะ 📸`,
+        data: { tripId, poiId: tripId, type: 'trip' } as NotificationPayloadData,
+        sound: 'default',
+        ...(Platform.OS === 'android' && { channelId: REMINDER_CHANNEL }),
+      },
+      trigger: {
+        type: SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds: triggerSeconds,
+      },
+    });
+  } catch (err) {
+    console.warn('[NotificationService] Native schedule trip error:', err);
+  }
 
   scheduledIds.set(tripId, identifier);
 
@@ -260,7 +304,6 @@ export async function scheduleTripReminder(
     channelId: REMINDER_CHANNEL,
   });
 
-  // เรียก callback เมื่อถึงเวลา (สำหรับอัพเดท UI ใน foreground)
   if (onTriggered) {
     setTimeout(() => {
       onTriggered();
@@ -273,18 +316,14 @@ export async function scheduleTripReminder(
 export async function cancelTripReminder(tripId: string): Promise<void> {
   if (scheduledIds.has(tripId)) {
     try {
-      await Notifications.cancelScheduledNotificationAsync(scheduledIds.get(tripId)!);
+      await cancelScheduledNotificationAsync(scheduledIds.get(tripId)!);
     } catch {
-      // Ignore
+      // ignore
     }
     scheduledIds.delete(tripId);
   }
   reminderStateMap.delete(tripId);
 }
-
-// ============================================================
-// Query state
-// ============================================================
 
 export function getActiveReminders(): Map<string, EventReminderState> {
   return new Map(reminderStateMap);
@@ -295,9 +334,8 @@ export function hasActiveReminder(eventId: string): boolean {
 }
 
 // ============================================================
-// Response/Deep Link handling
+// Response Handlers & Deep Linking
 // ============================================================
-
 export function openEventFromResponse(
   response: NotificationResponse | null
 ): string | null {
@@ -344,100 +382,94 @@ export function simulateColdStartNotification(eventId: string, eventTitle: strin
 }
 
 // ============================================================
-// Listeners — ใช้ expo-notifications listeners จริง
+// Listeners (Response & Received)
 // ============================================================
-
-/**
- * ฟัง notification response (เมื่อผู้ใช้แตะที่ notification)
- * ใช้ expo-notifications addNotificationResponseReceivedListener จริง
- */
 export function addNotificationResponseReceivedListener(
   listener: ResponseListener
 ): { remove: () => void } {
-  // ใช้ listener ของ expo-notifications จริง
-  const sub = Notifications.addNotificationResponseReceivedListener((nativeResponse) => {
-    // แปลงจาก native response เป็น custom type
-    const response: NotificationResponse = {
-      actionIdentifier: nativeResponse.actionIdentifier,
-      notification: {
+  let nativeSub: { remove: () => void } | null = null;
+  try {
+    nativeSub = nativeAddResponseListener((nativeResponse) => {
+      const response: NotificationResponse = {
+        actionIdentifier: nativeResponse.actionIdentifier,
+        notification: {
+          request: {
+            identifier: nativeResponse.notification.request.identifier,
+            content: {
+              title: nativeResponse.notification.request.content.title ?? '',
+              body: nativeResponse.notification.request.content.body ?? '',
+              data: (nativeResponse.notification.request.content.data ?? {}) as NotificationPayloadData,
+            },
+            trigger: {
+              type: 'native',
+              channelId: REMINDER_CHANNEL,
+            },
+          },
+          date: nativeResponse.notification.date,
+        },
+      };
+
+      lastNotificationResponse = response;
+      listener(response);
+    });
+  } catch (err) {
+    console.warn('[NotificationService] Response listener unavailable:', err);
+  }
+
+  responseListeners.add(listener);
+
+  return {
+    remove: () => {
+      nativeSub?.remove();
+      responseListeners.delete(listener);
+    },
+  };
+}
+
+export function addNotificationBannerListener(
+  listener: BannerListener
+): { remove: () => void } {
+  let nativeSub: { remove: () => void } | null = null;
+  try {
+    nativeSub = nativeAddReceivedListener((nativeNotif) => {
+      const notification: Notification = {
         request: {
-          identifier: nativeResponse.notification.request.identifier,
+          identifier: nativeNotif.request.identifier,
           content: {
-            title: nativeResponse.notification.request.content.title ?? '',
-            body: nativeResponse.notification.request.content.body ?? '',
-            data: (nativeResponse.notification.request.content.data ?? {}) as NotificationPayloadData,
+            title: nativeNotif.request.content.title ?? '',
+            body: nativeNotif.request.content.body ?? '',
+            data: (nativeNotif.request.content.data ?? {}) as NotificationPayloadData,
           },
           trigger: {
             type: 'native',
             channelId: REMINDER_CHANNEL,
           },
         },
-        date: nativeResponse.notification.date,
-      },
-    };
+        date: nativeNotif.date,
+      };
 
-    lastNotificationResponse = response;
-    listener(response);
-  });
+      try {
+        Vibration.vibrate([0, 250, 100, 250]);
+      } catch {
+        // ignore
+      }
 
-  // รองรับ listener จาก custom system ด้วย (สำหรับ cold start simulation)
-  responseListeners.add(listener);
-
-  return {
-    remove: () => {
-      sub.remove();
-      responseListeners.delete(listener);
-    },
-  };
-}
-
-/**
- * ฟัง notification เมื่อแอปอยู่ foreground (สำหรับ in-app banner)
- */
-export function addNotificationBannerListener(
-  listener: BannerListener
-): { remove: () => void } {
-  // ใช้ expo-notifications listener สำหรับ foreground notifications
-  const sub = Notifications.addNotificationReceivedListener((nativeNotif) => {
-    const notification: Notification = {
-      request: {
-        identifier: nativeNotif.request.identifier,
-        content: {
-          title: nativeNotif.request.content.title ?? '',
-          body: nativeNotif.request.content.body ?? '',
-          data: (nativeNotif.request.content.data ?? {}) as NotificationPayloadData,
-        },
-        trigger: {
-          type: 'native',
-          channelId: REMINDER_CHANNEL,
-        },
-      },
-      date: nativeNotif.date,
-    };
-
-    // สั่นเตือน
-    try {
-      Vibration.vibrate([0, 250, 100, 250]);
-    } catch {
-      // Ignore
-    }
-
-    listener(notification);
-  });
+      listener(notification);
+    });
+  } catch (err) {
+    console.warn('[NotificationService] Received listener unavailable:', err);
+  }
 
   bannerListeners.add(listener);
 
   return {
     remove: () => {
-      sub.remove();
+      nativeSub?.remove();
       bannerListeners.delete(listener);
     },
   };
 }
 
-/**
- * เมื่อผู้ใช้แตะ Banner ใน foreground — ส่ง response event
- */
 export function emitNotificationResponse(notification: Notification): void {
   const response: NotificationResponse = {
     actionIdentifier: DEFAULT_ACTION_IDENTIFIER,
