@@ -3,11 +3,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  SafeAreaView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
 import { PoiExplorerScreen } from './src/screens/PoiExplorerScreen';
@@ -110,6 +110,7 @@ export default function App() {
   }, []);
 
   return (
+    <SafeAreaProvider>
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
 
@@ -212,6 +213,7 @@ export default function App() {
         visible={testModalVisible}
       />
     </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
 

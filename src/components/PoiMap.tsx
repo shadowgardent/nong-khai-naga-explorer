@@ -2,11 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Modal,
   Pressable,
-  SafeAreaView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 
 import { colors } from '../theme/colors';
