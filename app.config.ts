@@ -13,6 +13,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       'expo-status-bar',
       'expo-camera',
       'expo-image-picker',
+      'expo-notifications',
       [
         'expo-splash-screen',
         {
