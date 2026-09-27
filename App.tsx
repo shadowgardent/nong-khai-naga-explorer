@@ -13,6 +13,7 @@ import { StatusBar } from 'expo-status-bar';
 import { PoiExplorerScreen } from './src/screens/PoiExplorerScreen';
 import { TripPlannerTab } from './src/components/TripPlannerTab';
 import { EventListTab } from './src/components/EventListTab';
+import { ProfileTab } from './src/components/ProfileTab';
 import { EventDetailModal } from './src/components/EventDetailModal';
 import { Lab11TestModal } from './src/components/Lab11TestModal';
 import { NotificationBanner } from './src/components/NotificationBanner';
@@ -25,7 +26,7 @@ import {
   setNotificationHandler,
 } from './src/services/notificationService';
 
-type MainTab = 'landmarks' | 'planner' | 'events';
+type MainTab = 'landmarks' | 'planner' | 'events' | 'profile';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<MainTab>('planner'); // ตั้งทริปเป็นหน้าแรกให้เห็นระบบจัดทริปใหม่ได้ทันที
@@ -133,12 +134,14 @@ export default function App() {
               onOpenTestPanel={() => setTestModalVisible(true)}
               onSelectPoi={handleSelectPoiFromEventOrTrip}
             />
-          ) : (
+          ) : activeTab === 'events' ? (
             <EventListTab
               onOpenEventDetail={handleOpenEventDetail}
               onOpenTestPanel={() => setTestModalVisible(true)}
               onSelectPoi={handleSelectPoiFromEventOrTrip}
             />
+          ) : (
+            <ProfileTab onOpenTestPanel={() => setTestModalVisible(true)} />
           )}
         </View>
 
@@ -152,7 +155,7 @@ export default function App() {
           >
             <Text style={styles.navIcon}>🗺️</Text>
             <Text style={[styles.navText, activeTab === 'landmarks' && styles.navTextActive]}>
-              10 แลนด์มาร์ก
+              แลนด์มาร์ก
             </Text>
           </Pressable>
 
@@ -164,7 +167,7 @@ export default function App() {
           >
             <Text style={styles.navIcon}>🧭</Text>
             <Text style={[styles.navText, activeTab === 'planner' && styles.navTextActive]}>
-              จัดทริป & กล้อง
+              ทริป & กล้อง
             </Text>
           </Pressable>
 
@@ -182,6 +185,18 @@ export default function App() {
             </View>
             <Text style={[styles.navText, activeTab === 'events' && styles.navTextActive]}>
               กิจกรรม
+            </Text>
+          </Pressable>
+
+          <Pressable
+            accessibilityLabel="หน้าข้อมูลผู้จัดทำ"
+            accessibilityRole="tab"
+            onPress={() => setActiveTab('profile')}
+            style={[styles.navItem, activeTab === 'profile' && styles.navItemActive]}
+          >
+            <Text style={styles.navIcon}>👤</Text>
+            <Text style={[styles.navText, activeTab === 'profile' && styles.navTextActive]}>
+              ผู้จัดทำ
             </Text>
           </Pressable>
 
