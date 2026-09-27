@@ -14,6 +14,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       'expo-camera',
       'expo-image-picker',
       'expo-notifications',
+      'expo-location',
       [
         'expo-splash-screen',
         {
@@ -31,6 +32,12 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     android: {
       package: 'com.nongkhai.explorer',
       predictiveBackGestureEnabled: false,
+      permissions: [
+        'android.permission.CAMERA',
+        'android.permission.RECORD_AUDIO',
+        'android.permission.ACCESS_FINE_LOCATION',
+        'android.permission.ACCESS_COARSE_LOCATION',
+      ],
       adaptiveIcon: {
         foregroundImage: './assets/nong-khai-naga-icon.png',
         backgroundColor: '#0B332B',

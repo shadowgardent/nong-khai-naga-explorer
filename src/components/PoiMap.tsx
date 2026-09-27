@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   Modal,
   Pressable,
   StyleSheet,
@@ -8,6 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
+import * as Location from 'expo-location';
 
 import { colors } from '../theme/colors';
 import type { PointOfInterest } from '../types/poi';
@@ -59,11 +62,22 @@ const createLeafletHtml = (initialPoi: PointOfInterest, zoom = 15) => `
       margin-bottom: 2px;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     }
-    .popup-address {
-      font-size: 11px;
-      color: #D2DFDB;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      line-height: 14px;
+    .user-location-marker {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      background: #0284C7;
+      border: 3px solid #FFFFFF;
+      border-radius: 50%;
+      box-shadow: 0 0 0 6px rgba(2, 132, 199, 0.35);
+      animation: pulse 1.8s infinite;
+    }
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(2, 132, 199, 0.6); }
+      70% { box-shadow: 0 0 0 12px rgba(2, 132, 199, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(2, 132, 199, 0); }
     }
   </style>
 </head>
@@ -80,6 +94,8 @@ const createLeafletHtml = (initialPoi: PointOfInterest, zoom = 15) => `
       maxZoom: 19,
       subdomains: ['a', 'b', 'c']
     }).addTo(map);
+
+    var userMarker = null;
 
     var marker = L.marker([${initialPoi.latitude}, ${initialPoi.longitude}], {
       icon: L.divIcon({
@@ -104,6 +120,23 @@ const createLeafletHtml = (initialPoi: PointOfInterest, zoom = 15) => `
         popupAnchor: [0, -22]
       }));
       marker.bindPopup('<div class="popup-title">' + name + '</div><div class="popup-address">' + address + '</div>').openPopup();
+    };
+
+    window.updateUserGps = function(lat, lng) {
+      if (!userMarker) {
+        userMarker = L.marker([lat, lng], {
+          icon: L.divIcon({
+            className: 'user-location-marker',
+            iconSize: [24, 24],
+            iconAnchor: [12, 12]
+          })
+        }).addTo(map);
+        userMarker.bindPopup('<div class="popup-title" style="color:#0284C7">📍 ตำแหน่งของคุณ</div><div class="popup-address">พิกัด GPS ปัจจุบัน</div>');
+      } else {
+        userMarker.setLatLng([lat, lng]);
+      }
+      map.flyTo([lat, lng], 16, { duration: 1.0 });
+      userMarker.openPopup();
     };
   </script>
 </body>
@@ -132,6 +165,55 @@ export function PoiMap({ poi }: PoiMapProps) {
       fullWebViewRef.current?.injectJavaScript(script);
     }
   }, [poi.id, poi.latitude, poi.longitude, isFullMapVisible]);
+
+  const [isLocating, setIsLocating] = useState(false);
+  const [userCoords, setUserCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+
+  // -------------------------------------------------------------
+  // ขอสิทธิ์และดึงตำแหน่ง GPS ปัจจุบันของผู้ใช้งาน
+  // -------------------------------------------------------------
+  const locateUserGps = async () => {
+    setIsLocating(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'ต้องการสิทธิ์ระบุตำแหน่ง (GPS)',
+          'กรุณาเปิดการอนุญาตใช้งานตำแหน่ง (Location Permission) ในการตั้งค่าเครื่อง'
+        );
+        setIsLocating(false);
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      const { latitude, longitude } = location.coords;
+      setUserCoords({ latitude, longitude });
+
+      const script = `
+        if (window.updateUserGps) {
+          window.updateUserGps(${latitude}, ${longitude});
+        }
+        true;
+      `;
+      webViewRef.current?.injectJavaScript(script);
+      fullWebViewRef.current?.injectJavaScript(script);
+
+      Alert.alert(
+        '📍 ระบุตำแหน่ง GPS สำเร็จ!',
+        `พิกัดของคุณ: ${latitude.toFixed(5)}, ${longitude.toFixed(5)}\nแผนที่ได้เลื่อนไปแสดงตำแหน่งของคุณเรียบร้อยแล้ว`
+      );
+    } catch (err: any) {
+      Alert.alert(
+        'ไม่สามารถระบุพิกัดได้',
+        'กรุณาตรวจสอบว่าเปิด GPS บนอุปกรณ์แล้วหรือไม่'
+      );
+    } finally {
+      setIsLocating(false);
+    }
+  };
 
   const centerFullMap = () => {
     const script = `
@@ -164,15 +246,33 @@ export function PoiMap({ poi }: PoiMapProps) {
           </Text>
         </View>
 
-        <Pressable
-          accessibilityLabel="เปิดแผนที่แบบเต็มหน้าจอ"
-          accessibilityRole="button"
-          onPress={() => setFullMapVisible(true)}
-          style={({ pressed }) => [styles.expandButton, pressed && styles.pressed]}
-        >
-          <Text style={styles.expandIcon}>⛶</Text>
-          <Text style={styles.expandText}>ขยายแผนที่</Text>
-        </Pressable>
+        <View style={styles.mapActionsRow}>
+          <Pressable
+            accessibilityLabel="ระบุตำแหน่งพิกัด GPS ของฉัน"
+            accessibilityRole="button"
+            onPress={locateUserGps}
+            style={({ pressed }) => [styles.gpsLocationButton, pressed && styles.pressed]}
+          >
+            {isLocating ? (
+              <ActivityIndicator color={colors.navy} size="small" />
+            ) : (
+              <>
+                <Text style={styles.gpsIconText}>🎯</Text>
+                <Text style={styles.gpsText}>ตำแหน่งฉัน</Text>
+              </>
+            )}
+          </Pressable>
+
+          <Pressable
+            accessibilityLabel="เปิดแผนที่แบบเต็มหน้าจอ"
+            accessibilityRole="button"
+            onPress={() => setFullMapVisible(true)}
+            style={({ pressed }) => [styles.expandButton, pressed && styles.pressed]}
+          >
+            <Text style={styles.expandIcon}>⛶</Text>
+            <Text style={styles.expandText}>ขยายแผนที่</Text>
+          </Pressable>
+        </View>
       </View>
 
       <Modal
@@ -210,6 +310,19 @@ export function PoiMap({ poi }: PoiMapProps) {
                   {poi.name}
                 </Text>
               </View>
+
+              <Pressable
+                accessibilityLabel="ระบุตำแหน่งพิกัด GPS ของฉัน"
+                accessibilityRole="button"
+                onPress={locateUserGps}
+                style={({ pressed }) => [styles.circleButton, pressed && styles.pressed, { marginRight: 6 }]}
+              >
+                {isLocating ? (
+                  <ActivityIndicator color={colors.gold} size="small" />
+                ) : (
+                  <Text style={styles.centerIcon}>🎯</Text>
+                )}
+              </Pressable>
 
               <Pressable
                 accessibilityLabel="เลื่อนแผนที่กลับไปที่หมุด"
@@ -285,25 +398,59 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     marginTop: 2,
   },
-  expandButton: {
+  mapActionsRow: {
     position: 'absolute',
-    top: 20,
-    right: 20,
+    bottom: 14,
+    right: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  gpsLocationButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderWidth: 1.5,
+    borderColor: '#0284C7',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  gpsIconText: {
+    fontSize: 13,
+  },
+  gpsText: {
+    color: '#0369A1',
+    fontSize: 10,
+    fontWeight: '900',
+    marginLeft: 4,
+  },
+  expandButton: {
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: 12,
     backgroundColor: colors.gold,
-    paddingHorizontal: 10,
+    paddingHorizontal: 11,
     paddingVertical: 7,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
   },
   expandIcon: {
     color: colors.navy,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '900',
   },
   expandText: {
     color: colors.navy,
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '900',
     marginLeft: 4,
   },
