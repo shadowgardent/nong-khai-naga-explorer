@@ -15,9 +15,12 @@ export type TripItem = {
   createdAt: string;
 };
 
+export type PhotoFilter = 'normal' | 'bw' | 'vibrant';
+
 export type TripPhoto = {
   id: string;
   uri: string;
   createdAt: string;
   caption?: string;
+  filter?: PhotoFilter;
 };

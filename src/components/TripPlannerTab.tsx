@@ -15,7 +15,7 @@ import { createInitialTrips } from '../data/initialTrips';
 import { takePhotoWithCamera, pickPhotoFromGallery } from '../services/cameraService';
 import { scheduleTripReminder, cancelTripReminder } from '../services/notificationService';
 import { colors } from '../theme/colors';
-import type { TripItem, TripPhoto } from '../types/trip';
+import type { PhotoFilter, TripItem, TripPhoto } from '../types/trip';
 import type { PointOfInterest } from '../types/poi';
 
 type TripPlannerTabProps = {
@@ -31,6 +31,12 @@ const TIME_OPTIONS = [
   { label: '⏱️ 1 ชั่วโมง', minutes: 60 },
 ];
 
+export const FILTER_OPTIONS: { id: PhotoFilter; label: string; icon: string; desc: string }[] = [
+  { id: 'normal', label: 'ปกติ (Original)', icon: '📷', desc: 'สีสันธรรมชาติ คมชัดตามต้นฉบับ' },
+  { id: 'bw', label: 'ขาวดำ (B&W)', icon: '🎞️', desc: 'โทนคลาสสิก ย้อนยุคสไตล์ภาพถ่ายโบราณ' },
+  { id: 'vibrant', label: 'สดใส (Vibrant)', icon: '✨', desc: 'สีสันสดอิ่ม โทนทองพญานาคสว่างสดใส' },
+];
+
 export function TripPlannerTab({ onSelectPoi, onOpenTestPanel }: TripPlannerTabProps) {
   const [trips, setTrips] = useState<TripItem[]>(() => createInitialTrips());
   const [selectedPoi, setSelectedPoi] = useState<PointOfInterest>(pointsOfInterest[0]);
@@ -39,8 +45,13 @@ export function TripPlannerTab({ onSelectPoi, onOpenTestPanel }: TripPlannerTabP
   const [tripNote, setTripNote] = useState<string>('ถ่ายรูปเช็คอิน & ชมวิว');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // State สำหรับ Modal ตกแต่งฟิลเตอร์ภาพถ่ายหลังถ่ายรูป/เลือกรูป
+  const [pendingPhotoUri, setPendingPhotoUri] = useState<string | null>(null);
+  const [targetTripIdForPhoto, setTargetTripIdForPhoto] = useState<string | null>(null);
+  const [selectedFilter, setSelectedFilter] = useState<PhotoFilter>('normal');
+
   // Modal สำหรับส่องดูรูปเต็มจอ
-  const [viewingPhotoUri, setViewingPhotoUri] = useState<string | null>(null);
+  const [viewingPhoto, setViewingPhoto] = useState<TripPhoto | null>(null);
 
   // -------------------------------------------------------------
   // เพิ่มจุดหมายใหม่เข้าทริป & ตั้งเวลาเตือน
@@ -105,26 +116,9 @@ export function TripPlannerTab({ onSelectPoi, onOpenTestPanel }: TripPlannerTabP
     try {
       const photoUri = await takePhotoWithCamera();
       if (photoUri) {
-        const newPhoto: TripPhoto = {
-          id: `photo-${Date.now()}`,
-          uri: photoUri,
-          createdAt: new Date().toISOString(),
-        };
-
-        setTrips((prev) =>
-          prev.map((trip) => {
-            if (trip.id === tripId) {
-              return {
-                ...trip,
-                status: 'completed',
-                photos: [newPhoto, ...trip.photos],
-              };
-            }
-            return trip;
-          })
-        );
-
-        Alert.alert('📸 ถ่ายรูปสำเร็จ!', 'บันทึกภาพถ่ายเช็คอินจุดหมายนี้เรียบร้อยแล้ว');
+        setTargetTripIdForPhoto(tripId);
+        setPendingPhotoUri(photoUri);
+        setSelectedFilter('normal');
       }
     } catch (error: any) {
       if (error?.message === 'camera-permission-denied') {
@@ -142,24 +136,9 @@ export function TripPlannerTab({ onSelectPoi, onOpenTestPanel }: TripPlannerTabP
     try {
       const photoUri = await pickPhotoFromGallery();
       if (photoUri) {
-        const newPhoto: TripPhoto = {
-          id: `photo-${Date.now()}`,
-          uri: photoUri,
-          createdAt: new Date().toISOString(),
-        };
-
-        setTrips((prev) =>
-          prev.map((trip) => {
-            if (trip.id === tripId) {
-              return {
-                ...trip,
-                status: 'completed',
-                photos: [newPhoto, ...trip.photos],
-              };
-            }
-            return trip;
-          })
-        );
+        setTargetTripIdForPhoto(tripId);
+        setPendingPhotoUri(photoUri);
+        setSelectedFilter('normal');
       }
     } catch (error: any) {
       if (error?.message === 'library-permission-denied') {
@@ -167,6 +146,40 @@ export function TripPlannerTab({ onSelectPoi, onOpenTestPanel }: TripPlannerTabP
       }
     }
   }, []);
+
+  // -------------------------------------------------------------
+  // บันทึกรูปภาพพร้อมฟิลเตอร์ที่เลือก (Save Filtered Photo)
+  // -------------------------------------------------------------
+  const handleSaveFilteredPhoto = useCallback(() => {
+    if (!pendingPhotoUri || !targetTripIdForPhoto) return;
+
+    const newPhoto: TripPhoto = {
+      id: `photo-${Date.now()}`,
+      uri: pendingPhotoUri,
+      createdAt: new Date().toISOString(),
+      filter: selectedFilter,
+    };
+
+    setTrips((prev) =>
+      prev.map((trip) => {
+        if (trip.id === targetTripIdForPhoto) {
+          return {
+            ...trip,
+            status: 'completed',
+            photos: [newPhoto, ...trip.photos],
+          };
+        }
+        return trip;
+      })
+    );
+
+    setPendingPhotoUri(null);
+    setTargetTripIdForPhoto(null);
+    Alert.alert(
+      '📸 บันทึกรูปสำเร็จ!',
+      `บันทึกรูปพร้อมฟิลเตอร์ "${FILTER_OPTIONS.find((f) => f.id === selectedFilter)?.label}" เรียบร้อยแล้ว`
+    );
+  }, [pendingPhotoUri, targetTripIdForPhoto, selectedFilter]);
 
   // -------------------------------------------------------------
   // ลบทริป / ยกเลิกการตั้งเตือน
@@ -336,8 +349,17 @@ export function TripPlannerTab({ onSelectPoi, onOpenTestPanel }: TripPlannerTabP
                   </Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.photoScroll}>
                     {trip.photos.map((photo) => (
-                      <Pressable key={photo.id} onPress={() => setViewingPhotoUri(photo.uri)}>
+                      <Pressable key={photo.id} onPress={() => setViewingPhoto(photo)} style={styles.photoThumbWrapper}>
                         <Image source={{ uri: photo.uri }} style={styles.photoThumb} />
+                        {photo.filter === 'bw' && <View style={styles.bwFilterOverlay} pointerEvents="none" />}
+                        {photo.filter === 'vibrant' && <View style={styles.vibrantFilterOverlay} pointerEvents="none" />}
+                        {photo.filter && photo.filter !== 'normal' && (
+                          <View style={styles.filterThumbBadge}>
+                            <Text style={styles.filterThumbBadgeText}>
+                              {photo.filter === 'bw' ? 'B&W' : 'VIB'}
+                            </Text>
+                          </View>
+                        )}
                       </Pressable>
                     ))}
                   </ScrollView>
@@ -414,14 +436,110 @@ export function TripPlannerTab({ onSelectPoi, onOpenTestPanel }: TripPlannerTabP
         </View>
       </Modal>
 
+      {/* Modal ปรับเลือกฟิลเตอร์ภาพถ่าย (Filter Selection Modal: 3 รูปแบบ) */}
+      <Modal visible={!!pendingPhotoUri} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.filterModalContent}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>🎨 ปรับแต่งฟิลเตอร์ภาพถ่าย</Text>
+                <Text style={styles.modalSubtitle}>เลือก 1 ใน 3 รูปแบบสไตล์ภาพก่อนบันทึก</Text>
+              </View>
+              <Pressable
+                onPress={() => {
+                  setPendingPhotoUri(null);
+                  setTargetTripIdForPhoto(null);
+                }}
+                style={styles.closeButton}
+              >
+                <Text style={styles.closeText}>✕</Text>
+              </Pressable>
+            </View>
+
+            {/* Photo Preview with Active Filter */}
+            {pendingPhotoUri && (
+              <View style={styles.filterPreviewContainer}>
+                <Image
+                  source={{ uri: pendingPhotoUri }}
+                  style={styles.filterPreviewImage}
+                  resizeMode="cover"
+                />
+                {selectedFilter === 'bw' && <View style={styles.bwFilterOverlay} pointerEvents="none" />}
+                {selectedFilter === 'vibrant' && <View style={styles.vibrantFilterOverlay} pointerEvents="none" />}
+
+                <View style={styles.activeFilterTag}>
+                  <Text style={styles.activeFilterTagText}>
+                    ฟิลเตอร์: {FILTER_OPTIONS.find((f) => f.id === selectedFilter)?.label}
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {/* 3 Filter Options Chips */}
+            <Text style={styles.filterSelectorTitle}>เลือกรูปแบบฟิลเตอร์:</Text>
+            <View style={styles.filterOptionsRow}>
+              {FILTER_OPTIONS.map((filter) => {
+                const isActive = selectedFilter === filter.id;
+                return (
+                  <Pressable
+                    key={filter.id}
+                    onPress={() => setSelectedFilter(filter.id)}
+                    style={[
+                      styles.filterCard,
+                      isActive && styles.filterCardActive,
+                    ]}
+                  >
+                    <Text style={styles.filterCardIcon}>{filter.icon}</Text>
+                    <Text style={[styles.filterCardLabel, isActive && styles.filterCardLabelActive]}>
+                      {filter.label}
+                    </Text>
+                    <Text style={styles.filterCardDesc} numberOfLines={2}>
+                      {filter.desc}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {/* Save Photo Button */}
+            <Pressable
+              accessibilityLabel="บันทึกรูปภาพพร้อมฟิลเตอร์"
+              accessibilityRole="button"
+              onPress={handleSaveFilteredPhoto}
+              style={styles.savePhotoButton}
+            >
+              <Text style={styles.savePhotoButtonIcon}>💾</Text>
+              <Text style={styles.savePhotoButtonText}>บันทึกรูปเช็คอินเข้าทริป</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
       {/* Fullscreen Photo Viewer Modal */}
-      <Modal visible={!!viewingPhotoUri} transparent animationType="fade">
+      <Modal visible={!!viewingPhoto} transparent animationType="fade">
         <View style={styles.fullPhotoOverlay}>
-          <Pressable onPress={() => setViewingPhotoUri(null)} style={styles.fullPhotoClose}>
+          <Pressable onPress={() => setViewingPhoto(null)} style={styles.fullPhotoClose}>
             <Text style={styles.fullPhotoCloseText}>✕ ปิด</Text>
           </Pressable>
-          {viewingPhotoUri && (
-            <Image source={{ uri: viewingPhotoUri }} style={styles.fullPhotoImage} resizeMode="contain" />
+          {viewingPhoto && (
+            <View style={styles.fullPhotoContainer}>
+              <Image
+                source={{ uri: viewingPhoto.uri }}
+                style={styles.fullPhotoImage}
+                resizeMode="contain"
+              />
+              {viewingPhoto.filter === 'bw' && <View style={styles.bwFilterOverlay} pointerEvents="none" />}
+              {viewingPhoto.filter === 'vibrant' && <View style={styles.vibrantFilterOverlay} pointerEvents="none" />}
+
+              <View style={styles.fullPhotoInfoBar}>
+                <Text style={styles.fullPhotoFilterLabel}>
+                  🎨 ฟิลเตอร์: {FILTER_OPTIONS.find((f) => f.id === viewingPhoto.filter)?.label ?? 'ปกติ'}
+                </Text>
+                <Text style={styles.fullPhotoDate}>
+                  ถ่ายเมื่อ {new Date(viewingPhoto.createdAt).toLocaleDateString('th-TH')}
+                </Text>
+              </View>
+            </View>
           )}
         </View>
       </Modal>
@@ -874,8 +992,171 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontSize: 14,
   },
+  photoThumbWrapper: {
+    position: 'relative',
+    marginRight: 8,
+  },
+  filterThumbBadge: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    borderRadius: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+  },
+  filterThumbBadgeText: {
+    color: colors.gold,
+    fontSize: 8,
+    fontWeight: '900',
+  },
+  bwFilterOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(50, 50, 50, 0.45)',
+  },
+  vibrantFilterOverlay: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(229, 169, 60, 0.22)',
+  },
+  filterModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 18,
+    maxHeight: '92%',
+    borderWidth: 1.5,
+    borderColor: colors.gold,
+  },
+  modalSubtitle: {
+    fontSize: 11,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  filterPreviewContainer: {
+    position: 'relative',
+    height: 220,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    marginBottom: 14,
+    backgroundColor: colors.surfaceWarm,
+  },
+  filterPreviewImage: {
+    width: '100%',
+    height: '100%',
+  },
+  activeFilterTag: {
+    position: 'absolute',
+    bottom: 8,
+    left: 8,
+    backgroundColor: 'rgba(11, 51, 43, 0.88)',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: colors.gold,
+  },
+  activeFilterTagText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  filterSelectorTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: colors.navy,
+    marginBottom: 8,
+  },
+  filterOptionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+  },
+  filterCard: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    padding: 10,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+  },
+  filterCardActive: {
+    backgroundColor: 'rgba(13, 110, 84, 0.08)',
+    borderColor: colors.primary,
+  },
+  filterCardIcon: {
+    fontSize: 22,
+    marginBottom: 4,
+  },
+  filterCardLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: colors.navy,
+    textAlign: 'center',
+    marginBottom: 2,
+  },
+  filterCardLabelActive: {
+    color: colors.primary,
+  },
+  filterCardDesc: {
+    fontSize: 9,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 12,
+  },
+  savePhotoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primary,
+    borderRadius: 14,
+    paddingVertical: 12,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  savePhotoButtonIcon: {
+    fontSize: 16,
+    marginRight: 6,
+  },
+  savePhotoButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  fullPhotoContainer: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  fullPhotoInfoBar: {
+    position: 'absolute',
+    bottom: 30,
+    backgroundColor: 'rgba(11, 51, 43, 0.92)',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: colors.gold,
+    alignItems: 'center',
+  },
+  fullPhotoFilterLabel: {
+    color: colors.gold,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  fullPhotoDate: {
+    color: '#D2DFDB',
+    fontSize: 10,
+    marginTop: 2,
+  },
   fullPhotoImage: {
     width: '94%',
-    height: '80%',
+    height: '75%',
   },
 });
