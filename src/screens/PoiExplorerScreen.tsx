@@ -16,28 +16,36 @@ import { pointsOfInterest } from '../data/pointsOfInterest';
 import { colors } from '../theme/colors';
 import type { PoiCategoryGroup, PointOfInterest } from '../types/poi';
 
-const CATEGORY_TABS: { key: PoiCategoryGroup; label: string; icon: string; count: number }[] = [
-  { key: 'all', label: 'ทั้งหมด', icon: '🌟', count: 10 },
-  { key: 'sacred', label: 'สายมู & วัด', icon: '🛕', count: 3 },
-  { key: 'nature', label: 'ธรรมชาติ & วิวโขง', icon: '🌄', count: 3 },
-  { key: 'lifestyle', label: 'ชิมช้อป & แลนด์มาร์ก', icon: '🛍️', count: 4 },
-];
-
 type PoiExplorerScreenProps = {
   /** poiId ที่ส่งมาจาก App.tsx เมื่อผู้ใช้แตะ Notification เพื่อโฟกัสสถานที่นั้นอัตโนมัติ */
   notificationPoiId?: string | null;
   /** Callback เมื่อจัดการโฟกัสสถานที่เสร็จแล้ว */
   onHandledNotification?: () => void;
+  /** รายการ ID สถานที่โปรด */
+  favoriteIds: string[];
+  /** ฟังก์ชันสลับสถานะรายการโปรด */
+  onToggleFavorite: (poiId: string) => void;
 };
 
 export function PoiExplorerScreen({
   notificationPoiId,
   onHandledNotification,
+  favoriteIds,
+  onToggleFavorite,
 }: PoiExplorerScreenProps) {
   const [selectedPoi, setSelectedPoi] = useState<PointOfInterest>(pointsOfInterest[0]);
   const [activeCategory, setActiveCategory] = useState<PoiCategoryGroup>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const listRef = useRef<FlatList<PointOfInterest>>(null);
+
+  // คำนวณจำนวนในแต่ละหมวดหมู่อย่าง dynamic
+  const categoryTabs = useMemo(() => [
+    { key: 'all' as PoiCategoryGroup, label: 'ทั้งหมด', icon: '🌟', count: pointsOfInterest.length },
+    { key: 'favorites' as PoiCategoryGroup, label: 'รายการโปรด', icon: '❤️', count: favoriteIds.length },
+    { key: 'sacred' as PoiCategoryGroup, label: 'สายมู & วัด', icon: '🛕', count: pointsOfInterest.filter(p => p.categoryGroup === 'sacred').length },
+    { key: 'nature' as PoiCategoryGroup, label: 'ธรรมชาติ & วิวโขง', icon: '🌄', count: pointsOfInterest.filter(p => p.categoryGroup === 'nature').length },
+    { key: 'lifestyle' as PoiCategoryGroup, label: 'ชิมช้อป & แลนด์มาร์ก', icon: '🛍️', count: pointsOfInterest.filter(p => p.categoryGroup === 'lifestyle').length },
+  ], [favoriteIds.length]);
 
   // In-App Reminder timer (สำหรับรันบน Expo Go 100% ป้องกัน crash บน Android)
   const [activeReminderPoiId, setActiveReminderPoiId] = useState<string | null>(null);
@@ -75,7 +83,13 @@ export function PoiExplorerScreen({
   const filteredPois = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     return pointsOfInterest.filter((item) => {
-      const matchCategory = activeCategory === 'all' || item.categoryGroup === activeCategory;
+      const matchCategory =
+        activeCategory === 'all'
+          ? true
+          : activeCategory === 'favorites'
+          ? favoriteIds.includes(item.id)
+          : item.categoryGroup === activeCategory;
+
       const matchSearch =
         !query ||
         item.name.toLowerCase().includes(query) ||
@@ -85,7 +99,7 @@ export function PoiExplorerScreen({
         item.description.toLowerCase().includes(query);
       return matchCategory && matchSearch;
     });
-  }, [activeCategory, searchQuery]);
+  }, [activeCategory, searchQuery, favoriteIds]);
 
   const selectPoi = (poi: PointOfInterest) => {
     setSelectedPoi(poi);
@@ -247,7 +261,7 @@ export function PoiExplorerScreen({
             horizontal
             showsHorizontalScrollIndicator={false}
           >
-            {CATEGORY_TABS.map((tab) => {
+            {categoryTabs.map((tab) => {
               const isActive = activeCategory === tab.key;
               return (
                 <Pressable
@@ -327,6 +341,27 @@ export function PoiExplorerScreen({
                 <Text style={styles.guideName}>{selectedPoi.name}</Text>
                 <Text style={styles.guideCategory}>{selectedPoi.category}</Text>
               </View>
+
+              {/* ปุ่ม Favorite หัวใจ ในหน้ารายละเอียดสถานที่ */}
+              <Pressable
+                accessibilityLabel={
+                  favoriteIds.includes(selectedPoi.id)
+                    ? `นำ ${selectedPoi.name} ออกจากรายการโปรด`
+                    : `เพิ่ม ${selectedPoi.name} ในรายการโปรด`
+                }
+                accessibilityRole="button"
+                hitSlop={8}
+                onPress={() => onToggleFavorite(selectedPoi.id)}
+                style={({ pressed }) => [
+                  styles.detailFavoriteBtn,
+                  favoriteIds.includes(selectedPoi.id) && styles.detailFavoriteBtnActive,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={styles.detailFavoriteIcon}>
+                  {favoriteIds.includes(selectedPoi.id) ? '❤️' : '🤍'}
+                </Text>
+              </Pressable>
             </View>
 
             <Text style={styles.guideDescription}>{selectedPoi.description}</Text>
@@ -452,13 +487,36 @@ export function PoiExplorerScreen({
               </Text>
             </View>
 
-            <View style={[styles.cardSelectBtn, isSelected && styles.cardSelectBtnActive]}>
-              {activeReminderPoiId === item.id && (
-                <Text style={styles.cardReminderBadge}>🔔 </Text>
-              )}
-              <Text style={[styles.cardSelectBtnText, isSelected && styles.cardSelectBtnTextActive]}>
-                {isSelected ? '✓ หมุดนี้' : 'ดูพิกัด'}
-              </Text>
+            <View style={styles.cardActionsGroup}>
+              {/* ปุ่ม Favorite หัวใจบนการ์ดรายการ */}
+              <Pressable
+                accessibilityLabel={
+                  favoriteIds.includes(item.id)
+                    ? `นำ ${item.name} ออกจากรายการโปรด`
+                    : `เพิ่ม ${item.name} ในรายการโปรด`
+                }
+                accessibilityRole="button"
+                hitSlop={8}
+                onPress={() => onToggleFavorite(item.id)}
+                style={({ pressed }) => [
+                  styles.cardFavoriteBtn,
+                  favoriteIds.includes(item.id) && styles.cardFavoriteBtnActive,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <Text style={styles.cardFavoriteIcon}>
+                  {favoriteIds.includes(item.id) ? '❤️' : '🤍'}
+                </Text>
+              </Pressable>
+
+              <View style={[styles.cardSelectBtn, isSelected && styles.cardSelectBtnActive]}>
+                {activeReminderPoiId === item.id && (
+                  <Text style={styles.cardReminderBadge}>🔔 </Text>
+                )}
+                <Text style={[styles.cardSelectBtnText, isSelected && styles.cardSelectBtnTextActive]}>
+                  {isSelected ? '✓ หมุดนี้' : 'ดูพิกัด'}
+                </Text>
+              </View>
             </View>
           </Pressable>
         );
@@ -1098,6 +1156,51 @@ const styles = StyleSheet.create({
     color: colors.navy,
     fontSize: 11,
     fontWeight: '900',
+  },
+  cardActionsGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginLeft: 6,
+  },
+  cardFavoriteBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardFavoriteBtnActive: {
+    backgroundColor: '#FEE2E2',
+    borderColor: '#FCA5A5',
+  },
+  cardFavoriteIcon: {
+    fontSize: 14,
+  },
+  detailFavoriteBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  detailFavoriteBtnActive: {
+    backgroundColor: '#FEE2E2',
+    borderColor: '#F87171',
+  },
+  detailFavoriteIcon: {
+    fontSize: 20,
   },
   pressed: {
     opacity: 0.76,

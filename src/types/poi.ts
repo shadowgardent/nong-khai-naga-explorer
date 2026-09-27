@@ -1,4 +1,4 @@
-export type PoiCategoryGroup = 'all' | 'sacred' | 'nature' | 'lifestyle';
+export type PoiCategoryGroup = 'all' | 'favorites' | 'sacred' | 'nature' | 'lifestyle';
 
 export type PointOfInterest = {
   id: string;

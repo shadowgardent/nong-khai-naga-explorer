@@ -37,6 +37,15 @@ export default function App() {
   const [eventModalVisible, setEventModalVisible] = useState(false);
   const [testModalVisible, setTestModalVisible] = useState(false);
 
+  // สถานะรายการโปรด (Favorites) เก็บที่ Root เพื่อไม่ให้ข้อมูลหายเมื่อเปลี่ยนหน้า/สลับแท็บ
+  const [favoriteIds, setFavoriteIds] = useState<string[]>(['wat-pho-chai', 'twin-naga-yard']);
+
+  const handleToggleFavorite = useCallback((poiId: string) => {
+    setFavoriteIds((prev) =>
+      prev.includes(poiId) ? prev.filter((id) => id !== poiId) : [...prev, poiId]
+    );
+  }, []);
+
   // -------------------------------------------------------------
   // Observer ใน Root Layout ตามข้อกำหนด Lab 11 & Trip Notifications
   // -------------------------------------------------------------
@@ -126,8 +135,10 @@ export default function App() {
         <View style={styles.contentArea}>
           {activeTab === 'landmarks' ? (
             <PoiExplorerScreen
+              favoriteIds={favoriteIds}
               notificationPoiId={targetPoiId}
               onHandledNotification={() => setTargetPoiId(null)}
+              onToggleFavorite={handleToggleFavorite}
             />
           ) : activeTab === 'planner' ? (
             <TripPlannerTab
